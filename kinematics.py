@@ -342,7 +342,13 @@ def generateSequence (wing_points, wingtip_index, pivot_index, start_time=0, num
 
         #angles_dot
         phis_dot, alphas_dot, thetas_dot = create_wing_angles_dot(phis, alphas, thetas, timeline)
-   
+
+    alphas_interp = interp1d(timeline, alphas, fill_value='extrapolate')
+    phis_interp = interp1d(timeline, phis, fill_value='extrapolate')
+    thetas_interp = interp1d(timeline, thetas, fill_value='extrapolate')
+
+    timeline = np.linspace(0, 1, 101)
+
     stroke_points_sequence = []
     body_points_sequence = []
     global_points_sequence = []
@@ -360,8 +366,16 @@ def generateSequence (wing_points, wingtip_index, pivot_index, start_time=0, num
     lift_vectors = [] 
     lift_vectors_norm = []
 
+    delta_t = timeline[1] - timeline[0]
+    print(delta_t)
+
     for timeStep in range(len(timeline)):
+        t = timeline[timeStep]
         #parameter array: psi [0], beta[1], gamma[2], eta[3], phi[4], alpha[5], theta[6]
+        alphas_dot = (alphas_interp(t+delta_t) - alphas_interp(t))/delta_t
+        phis_dot = (phis_interp(t+delta_t) - phis_interp(t)) / delta_t
+        phis_dot = (thetas_interp(t+delta_t) - thetas_interp(t)) / delta_t
+
         parameters = [0, 0, 0, -80*np.pi/180, phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
         parameters_dot = [0, 0, 0, 0, phis_dot[timeStep], alphas_dot[timeStep], thetas_dot[timeStep]]
         stroke_points, [wing_rotationMatrix, wing_rotationMatrix_T] = convert_from_wing_reference_frame_to_stroke_plane(wing_points, parameters)
@@ -373,6 +387,10 @@ def generateSequence (wing_points, wingtip_index, pivot_index, start_time=0, num
         stroke_points_sequence.append(stroke_points)
         body_points_sequence.append(body_points)
         global_points_sequence.append(global_points)
+
+        xWing = np.matmul((np.matmul(stroke_rotationMatrix_T, wing_rotationMatrix_T)), np.array([[1], [0], [0]]))
+        yWing = np.matmul((np.matmul(stroke_rotationMatrix_T, wing_rotationMatrix_T)), np.array([[0], [1], [0]]))
+        print('xWing:', xWing, '\n', 'yWing:', yWing)
 
         omegaW_b, omegaW_w = generate_omegaW(wing_rotationMatrix, stroke_rotationMatrix, stroke_rotationMatrix_T, parameters[4], parameters_dot[4], parameters[5], 
                                     parameters_dot[5], parameters[6], parameters_dot[6])
@@ -409,7 +427,7 @@ def generateSequence (wing_points, wingtip_index, pivot_index, start_time=0, num
         lift_vector = orthogonal_vector(uW_g_vector_normalized, R)
         # print('lift vector before', lift_vector)
         # print('alphas', alphas[timeStep], timeStep)
-        lift_vector = lift_vector*np.sign(alphas[timeStep])
+        lift_vector = lift_vector*np.sign(alphas_interp(t))
         lift_vectors.append(lift_vector)
         if lift_vector[2] < 0:
             lift_vector[2] = -lift_vector[2] 
