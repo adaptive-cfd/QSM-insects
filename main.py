@@ -114,7 +114,7 @@ def F(x, show_plots=False):
 ####Optimization 
 x_0 = [ 0.0041443,   0.02452099,  0.03143651, -0.01875035]
 bounds = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
-optimize = False
+optimize = True
 if optimize:
     optimization = opt.differential_evolution(F, bounds=bounds, x0=x_0, maxiter=20)
     x_final = optimization.x
