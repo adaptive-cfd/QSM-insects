@@ -6,7 +6,7 @@ def getAerodynamicCoefficients(x0, AoA):
     cd = x0[2] + x0[3]*np.cos(2.04*AoA - np.radians(9.82))
     return cl, cd
 
-def load_forces_data(file = 'data/forces_data_for_QSM.csv'):
+def load_forces_data(file = 'forces_data_for_QSM.csv'):
     t = [] 
     Fx = [] 
     Fy = [] 

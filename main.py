@@ -16,16 +16,15 @@ def F(x, show_plots=False):
     AoA_final = [] 
     for wingpoints_AoA in AoA:
         #aoa = np.max(wingpoints_AoA)
-        aoa_median = np.sort(wingpoints_AoA)[len(wing_points)//2]
-        AoA_final.append(aoa_median)
+        AoA_final.append(wingpoints_AoA)
     #print('AoA:', AoA_final)
     cl, cd = getAerodynamicCoefficients(x, np.array(AoA_final))
     if show_plots: 
-        plt.plot(timeline, np.degrees(phis), label='ɸ')
-        plt.plot(timeline, np.degrees(alphas), label ='⍺')
-        plt.plot(timeline, np.degrees(thetas), label='Θ')
-        plt.legend()
-        plt.show()
+        # plt.plot(timeline, np.degrees(phis), label='ɸ')
+        # plt.plot(timeline, np.degrees(alphas), label ='⍺')
+        # plt.plot(timeline, np.degrees(thetas), label='Θ')
+        # plt.legend()
+        # plt.show()
 
         plt.plot(timeline, np.degrees(AoA_final), label='AoA')
         plt.xlabel('t/T')
@@ -70,17 +69,20 @@ def F(x, show_plots=False):
     Fl = np.array(Fl)
     Fd = np.array(Fd)
 
-    Fx_QSM = Fl[:-1, 0]+Fd[:-1, 0]
-    Fy_QSM = Fl[:-1, 1]+Fd[:-1, 1]
-    Fz_QSM = Fl[:-1, 2]+Fd[:-1, 2]
+    Fx_QSM = Fl[:, 0]+Fd[:, 0]
+    Fy_QSM = Fl[:, 1]+Fd[:, 1]
+    Fz_QSM = Fl[:, 2]+Fd[:, 2]
 
     t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data()
+    Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
+    Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
+    Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
     t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data() 
 
     # print(Fz_CFD.shape, Fx_CFD.shape)
 
-    K_num = np.linalg.norm(Fx_QSM-Fx_CFD) + np.linalg.norm(Fz_QSM-Fz_CFD)
-    K_den = np.linalg.norm(Fx_CFD) + np.linalg.norm(Fz_CFD)
+    K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline))
+    K_den = np.linalg.norm(Fx_CFD_interp(timeline) + np.linalg.norm(Fz_CFD_interp(timeline)))
     if K_den != 0: 
         K = K_num/K_den
     else:
@@ -96,10 +98,10 @@ def F(x, show_plots=False):
         plt.legend()
         plt.show()
 
-        plt.plot(timeline[:-1], Fx_QSM, label='Fx_QSM', color='red')
-        plt.plot(timeline[:-1], Fz_QSM, label='Fz_QSM', color='blue')
-        plt.plot(timeline[:-1], Fx_CFD, label='Fx_CFD', linestyle = 'dashed', color='red')
-        plt.plot(timeline[:-1], Fz_CFD, label='Fz_CFD', linestyle = 'dashed', color='blue')
+        plt.plot(timeline[:], Fx_QSM, label='Fx_QSM', color='red')
+        plt.plot(timeline[:], Fz_QSM, label='Fz_QSM', color='blue')
+        plt.plot(timeline[:], Fx_CFD_interp(timeline), label='Fx_CFD', linestyle = 'dashed', color='red')
+        plt.plot(timeline[:], Fz_CFD_interp(timeline), label='Fz_CFD', linestyle = 'dashed', color='blue')
         plt.xlabel('t/T')
         plt.ylabel('Force')
         plt.title(f'Fx_QSM/Fx_CFD = {np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD)}; Fz_QSM/Fz_CFD = {np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD)}')
