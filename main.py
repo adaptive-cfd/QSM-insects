@@ -6,13 +6,10 @@ import matplotlib.pyplot as plt
 from debug import writeArraytoFile
 import numpy as np 
 import scipy.optimize as opt
+import time
 
 
-def F(x, show_plots=False):
-    timeline, global_points_sequence, body_points_sequence, stroke_points_sequence, wing_points, phis, alphas, thetas, omegasW_b, omegasW_w, usW_w, usW_g, verifying_usW_g, vw_w, AoA, uW_g_vectors, dW_g_vectors, lift_vectors_norm, wingtip_index, pivot_index = kinematics()
-    #aerodynamic coefficients 
-
-
+def F(x, timeline, global_points_sequence, body_points_sequence, stroke_points_sequence, wing_points, phis, alphas, thetas, omegasW_b, omegasW_w, usW_w, usW_g, verifying_usW_g, vw_w, AoA, uW_g_vectors, dW_g_vectors, lift_vectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, show_plots=False):
     AoA_final = [] 
     for wingpoints_AoA in AoA:
         #aoa = np.max(wingpoints_AoA)
@@ -73,21 +70,13 @@ def F(x, show_plots=False):
     Fy_QSM = Fl[:, 1]+Fd[:, 1]
     Fz_QSM = Fl[:, 2]+Fd[:, 2]
 
-    t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data()
-    Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
-    Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
-    Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
-    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data() 
-
-    # print(Fz_CFD.shape, Fx_CFD.shape)
-
     K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline))
     K_den = np.linalg.norm(Fx_CFD_interp(timeline) + np.linalg.norm(Fz_CFD_interp(timeline)))
     if K_den != 0: 
         K = K_num/K_den
     else:
         K = K_num
-    print('K:', K)
+    #print('K:', K)
     if show_plots:
         graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
         gCl, gCd = getAerodynamicCoefficients(x, graphAoA)
@@ -104,7 +93,7 @@ def F(x, show_plots=False):
         plt.plot(timeline[:], Fz_CFD_interp(timeline), label='Fz_CFD', linestyle = 'dashed', color='blue')
         plt.xlabel('t/T')
         plt.ylabel('Force')
-        plt.title(f'Fx_QSM/Fx_CFD = {np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD)}; Fz_QSM/Fz_CFD = {np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD)}')
+        plt.title(f'Fx_QSM/Fx_CFD = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_interp(timeline)), 3)}; Fz_QSM/Fz_CFD = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_interp(timeline)), 3)}')
         plt.legend()
         plt.show()
 
@@ -112,22 +101,30 @@ def F(x, show_plots=False):
     return K 
 
 ####Optimization 
-x_0 = [ 0.0041443,   0.02452099,  0.03143651, -0.01875035]
-bounds = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
-optimize = True
-if optimize:
-    optimization = opt.differential_evolution(F, bounds=bounds, x0=x_0, maxiter=20)
-    x_final = optimization.x
-    K_final = optimization.fun
+def main():
+    timeline, global_points_sequence, body_points_sequence, stroke_points_sequence, wing_points, phis, alphas, thetas, omegasW_b, omegasW_w, usW_w, usW_g, verifying_usW_g, vw_w, AoA, uW_g_vectors, dW_g_vectors, lift_vectors_norm, wingtip_index, pivot_index = kinematics()
+    t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data()
+    Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
+    Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
+    Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
+    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data() 
+    x_0 = [ 0.0041443,   0.02452099,  0.03143651, -0.01875035]
+    bounds = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
+    optimize = True
+    if optimize:
+        start = time.time()
+        optimization = opt.differential_evolution(F, args=(timeline, global_points_sequence, body_points_sequence, stroke_points_sequence, wing_points, phis, alphas, thetas, omegasW_b, omegasW_w, usW_w, usW_g, verifying_usW_g, vw_w, AoA, uW_g_vectors, dW_g_vectors, lift_vectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD), bounds=bounds, x0=x_0, maxiter=20)
+        x_final = optimization.x
+        K_final = optimization.fun
+        print('completed in:', round(time.time() - start, 3), ' seconds')
+    else:
+        x_final = [0.0041443,   0.02452099,  0.03143651, -0.01875035]
+        K_final = 0.536316657116528
 
-else:
-    x_final = [ 0.0041443,   0.02452099,  0.03143651, -0.01875035]
-    K_final = 0.536316657116528
-
-print('x0_final: ', x_final, 'K_final: ', K_final)
-F(x_final, True)
-# print('K:', K)
-    
+    print('x0_final: ', x_final, 'K_final: ', K_final)
+    F(x_final, timeline, global_points_sequence, body_points_sequence, stroke_points_sequence, wing_points, phis, alphas, thetas, omegasW_b, omegasW_w, usW_w, usW_g, verifying_usW_g, vw_w, AoA, uW_g_vectors, dW_g_vectors, lift_vectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
+    # print('K:', K)
+main()
 
 # writeArraytoFile(Fl, 'lift.txt')
 # writeArraytoFile(Fd, 'drag.txt')

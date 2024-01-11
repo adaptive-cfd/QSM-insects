@@ -24,4 +24,3 @@ def load_forces_data(file = 'forces_data_for_QSM.csv'):
                 Fz.append(float(fz))
             c += 1
     return np.array(t), np.array(Fx), np.array(Fy), np.array(Fz)
-
