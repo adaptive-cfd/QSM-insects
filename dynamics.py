@@ -2,8 +2,14 @@ import numpy as np
 import csv
 
 def getAerodynamicCoefficients(x0, AoA): 
-    cl = x0[0] + x0[1]*np.sin(2.13*AoA - np.radians(7.20))
-    cd = x0[2] + x0[3]*np.cos(2.04*AoA - np.radians(9.82))
+    deg2rad = np.pi/180.0 
+    rad2deg = 180.0/np.pi
+    
+    AoA = rad2deg*AoA
+    
+    cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+    cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+    
     return cl, cd
 
 def load_forces_data(file = 'forces_data_for_QSM.csv'):
