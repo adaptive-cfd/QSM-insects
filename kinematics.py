@@ -240,11 +240,11 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
     rot_wing_g = np.matmul(bodyRotationMatrixTrans, rot_wing_b)
     return rot_wing_g, rot_wing_b, rot_wing_w
 
-def generate_u_wing_g_position(rot_wing_g, yWing_g):
+def generate_u_wing_g_position(rot_wing_g, y_wing_g):
     # #omega x point
     # #keep in mind that omega is a COLUMN vector and wing_point is a ROW vector. omega has to be converted to a ROW vector in order to calculate the x product
-    rot_wing_g = rot_wing_g.flatten() #either we flatten rot_wing_g or we reshape yWing_g.reshape(3, 1)
-    u_wing_g_position = np.cross(rot_wing_g, yWing_g)
+    rot_wing_g = rot_wing_g.flatten() #either we flatten rot_wing_g or we reshape y_wing_g.reshape(3, 1)
+    u_wing_g_position = np.cross(rot_wing_g, y_wing_g)
     return u_wing_g_position
 
 def generate_u_wing_w(u_wing_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix):
@@ -252,19 +252,20 @@ def generate_u_wing_w(u_wing_g, bodyRotationMatrix, strokeRotationMatrix, wingRo
     u_wing_w = np.matmul(rotationMatrix, u_wing_g)
     return u_wing_w
 
-def orthogonal_vector(normal, R):
-    return np.cross(normal, R)
-
 def getWindDirectioninWingReferenceFrame(u_wind_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix): 
     u_wind_b = np.matmul(bodyRotationMatrix, u_wind_g.reshape(3,1))
     u_wind_s = np.matmul(strokeRotationMatrix, u_wind_b.reshape(3,1))
     u_wind_w = np.matmul(wingRotationMatrix, u_wind_s.reshape(3,1))
     return u_wind_w
 
-def getAoA(drag_vector, xWing_g):
-    #should be in the wing reference frame
-    AoA = np.arctan2(np.linalg.norm(np.cross(xWing_g, drag_vector)), np.dot(-drag_vector, xWing_g)) #rad
-    return AoA  
+def getAoA(x_wing_g, e_u_wing_g):
+    AoA = np.arccos(np.dot(x_wing_g, e_u_wing_g))
+    return AoA
+
+# def getAoA(drag_vector, x_wing_g):
+#     #should be in the wing reference frame
+#     AoA = np.arctan2(np.linalg.norm(np.cross(x_wing_g, drag_vector)), np.dot(-drag_vector, x_wing_g)) #rad
+#     return AoA  
         
 def load_kinematics_data(file='kinematics_data_for_QSM.csv'): 
     t = [] 
@@ -361,9 +362,9 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         bodyPointsSequence.append(bodyPoints)
         globalPointsSequence.append(globalPoints)
 
-        xWing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
-        yWing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
-        #print('xWing_g:', xWing_g, '\n', 'yWing_g:', yWing_g)
+        x_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
+        y_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
+        #print('x_wing_g:', x_wing_g, '\n', 'y_wing_g:', y_wing_g)
 
         rot_wing_g, rot_wing_b, rot_wing_w = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
                                     parameters_dt[5], parameters[6], parameters_dt[6])
@@ -372,7 +373,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         rots_wing_w.append(rot_wing_w)
         rots_wing_g.append(rot_wing_g)
 
-        u_wing_g = generate_u_wing_g_position(rot_wing_g, yWing_g.flatten())
+        u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g.flatten())
 
         vWtotG = u_wing_g + u_wind_g
         
@@ -395,16 +396,16 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         u_wing_g_vectors.append(u_wing_g_vector)
         u_wing_g_magnitude = np.sqrt(u_wing_g_vector[0]**2 + u_wing_g_vector[1]**2 + u_wing_g_vector[2]**2)
         if u_wing_g_magnitude != 0:  
-            u_wing_g_vector_normalized = u_wing_g_vector/u_wing_g_magnitude
+            e_u_wing_g = u_wing_g_vector/u_wing_g_magnitude
         else:
-            u_wing_g_vector_normalized = u_wing_g_vector 
-        dragVector_wing_g = -u_wing_g_vector_normalized
+            e_u_wing_g = u_wing_g_vector 
+        dragVector_wing_g = -e_u_wing_g
         dragVectors_wing_g.append(dragVector_wing_g)
     
         #lift 
         #R = globalPointsSequence[timeStep][wingtip_index] - globalPointsSequence[timeStep][pivot_index]
         #ax.quiver(X[pivot_index], Y[pivot_index], Z[pivot_index], R[0], R[1], R[2], color='red')
-        liftVector = orthogonal_vector(u_wing_g_vector_normalized, yWing_g.flatten())
+        liftVector = np.cross(e_u_wing_g, y_wing_g.flatten())
         # print('lift vector before', liftVector)
         # print('alphas', alphas[timeStep], timeStep)
         liftVector = liftVector*np.sign(alphas_interp(t))
@@ -419,7 +420,8 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         # else:
         #     liftVector *= 0 
         #     dragVector_wing_g *= 0 
-        aoa = getAoA(dragVector_wing_g, xWing_g.flatten())
+       #aoa = getAoA(dragVector_wing_g, x_wing_g.flatten())
+        aoa = getAoA(x_wing_g.flatten(), e_u_wing_g)
         AoA.append(aoa)
         liftVector_mag = np.sqrt(liftVector[0]**2 + liftVector[1]**2 + liftVector[2]**2)
         if liftVector_mag != 0: 
