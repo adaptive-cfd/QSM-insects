@@ -7,13 +7,15 @@ from debug import writeArraytoFile
 import numpy as np 
 import scipy.optimize as opt
 import time
+import cProfile
+import pstats
+import io
 
-
-def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, liftVectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, show_plots=False):
-    AoA_final = [] 
+def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, show_plots=False):
+    AoA_final = np.zeros((AoA.shape[0], 3))
     for wingpoints_AoA in AoA:
         #aoa = np.max(wingpoints_AoA)
-        AoA_final.append(wingpoints_AoA)
+        AoA_final[wingPoints, :] = wingpoints_AoA
     #print('AoA:', AoA_final)
     cl, cd = getAerodynamicCoefficients(x, np.array(AoA_final))
     if show_plots: 
@@ -57,13 +59,13 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     Fl_mag = 0.5*rho*cl*planarOmegaSq.flatten()*I
     Fd_mag = 0.5*rho*cd*planarOmegaSq.flatten()*I
 
-    Fl = []
-    Fd = []
-    for i in range(len(timeline)):
-        Fl.append(Fl_mag[i] * liftVectors_norm[i])
-        Fd.append(Fd_mag[i] * dragVectors_wing_g[i])
+    Fl = np.zeros((timeline.shape[0], 3))
+    Fd = np.zeros((timeline.shape[0], 3))
+    for i in range(timeline.shape[0]):
+        Fl[i,:] = (Fl_mag[i] * e_liftVectors[i])
+        Fd[i,:] = (Fd_mag[i] * dragVectors_wing_g[i])
 
-    Fl = np.array(Fl)
+    # Fl = np.array(Fl)
     Fd = np.array(Fd)
 
     Fx_QSM = Fl[:, 0]+Fd[:, 0]
@@ -97,12 +99,12 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.legend()
         plt.show()
 
-        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA_final, u_wing_g_vectors, dragVectors_wing_g, liftVectors_norm, wingtip_index, pivot_index, Fl, Fd)
+        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA_final, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd)
     return K 
 
 ####Optimization 
 def main():
-    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, liftVectors_norm, wingtip_index, pivot_index = kinematics()
+    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
     t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data()
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
     Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
@@ -113,7 +115,7 @@ def main():
     optimize = True
     if optimize:
         start = time.time()
-        optimization = opt.differential_evolution(F, args=(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, liftVectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD), bounds=bounds, x0=x_0, maxiter=20)
+        optimization = opt.differential_evolution(F, args=(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD), bounds=bounds, x0=x_0, maxiter=20)
         x_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
@@ -122,9 +124,18 @@ def main():
         K_final = 0.09349021020747196
 
     print('x0_final: ', x_final, 'K_final: ', K_final)
-    F(x_final, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, liftVectors_norm, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
+    F(x_final, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
     # print('K:', K)
+
+profile = cProfile()
+profile.enable()
 main()
+profile.disable()
+s = io.StringIO()
+ps = pstats.Stats(profile, stream=s).sort_stats('cumulative')
+ps.print_stats()
+with open('profile.txt', 'w') as file:
+    file.write(s.getvalue())
 
 # writeArraytoFile(Fl, 'lift.txt')
 # writeArraytoFile(Fd, 'drag.txt')
@@ -143,7 +154,7 @@ main()
 # plt.legend()
 # plt.show() 
 
-# plt.plot(timeline, np.array(liftVectors_norm)[:, 2], label='lift norm vector z')
+# plt.plot(timeline, np.array(e_liftVectors)[:, 2], label='lift norm vector z')
 
 # plt.legend()
 # plt.show() 
