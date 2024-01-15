@@ -323,7 +323,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
     us_wing_g = np.zeros((timeline.shape[0], 3, 1))
 
     us_wind_w = np.zeros((timeline.shape[0], 3, 1))
-    AoA = np.zeros((timeline.shape[0], 3))
+    AoA = np.zeros((timeline.shape[0], 1))
     u_wing_g_vectors = np.zeros((timeline.shape[0], 3)) 
     dragVectors_wing_g = np.zeros((timeline.shape[0], 3))
     liftVectors = np.zeros((timeline.shape[0], 3))
