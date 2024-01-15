@@ -14,6 +14,7 @@ from matplotlib import animation
 import functools 
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import insect_tools
+import debug as db 
 
 
 """
@@ -294,6 +295,10 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         phis_dt, alphas_dt, thetas_dt = create_wing_angles_dt(phis, alphas, thetas, timeline)
 
     print('alpha:', alphas.shape, '\n', 'timeline:', timeline.shape)
+    print('alpha:', alphas, '\n', 'timeline:', timeline)
+    db.writeArraytoFile(alphas, 'alphas.txt')
+    db.writeArraytoFile(timeline, 'timeline.txt')
+    exit()
     alphas_interp = interp1d(timeline, alphas, fill_value='extrapolate')
     phis_interp = interp1d(timeline, phis, fill_value='extrapolate')
     thetas_interp = interp1d(timeline, thetas, fill_value='extrapolate')
