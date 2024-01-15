@@ -344,7 +344,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         strokePoints, [wingRotationMatrix, wingRotationMatrixTrans] = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
         bodyPoints, [strokeRotationMatrix, strokeRotationMatrixTrans] = convert_from_stroke_plane_to_body_reference_frame(strokePoints, parameters)
         globalPoints, [bodyRotationMatrix, bodyRotationMatrixTrans] = convert_from_body_reference_frame_to_global_reference_frame(bodyPoints, parameters)
-        #print('\n\nthese are the global points before\n\n', globalPoints)
+        # print('\n\nthese are the global points before\n\n', globalPoints)
         # print('\n\nthis is the stroke rotation matrix: ', strokeRotationMatrix)
         # print('\n\nthis is the transpose of stroke rotation matrix : ', strokeRotationMatrixTrans)
         # print('sequence', strokePointsSequence, '\n', 'stroke', strokePoints)
@@ -364,7 +364,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         rots_wing_b[timeStep, :] = rot_wing_b
         rots_wing_w[timeStep, :] = rot_wing_w
         rots_wing_g[timeStep, :] = rot_wing_g
-        print(rots_wing_w)
+        # print(rots_wing_w)
 
         u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g.flatten())
         # print(rot_wing_g) #(3,1)
@@ -411,6 +411,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         # print('alphas', alphas[timeStep], timeStep)
         liftVector = liftVector*np.sign(alphas_interp(t))
         liftVectors[timeStep, :] = liftVector
+        # print(liftVector.shape)
         # if liftVector[2] < 0:
         #     liftVector[2] = -liftVector[2] 
 
@@ -424,7 +425,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
        #aoa = getAoA(dragVector_wing_g, x_wing_g.flatten())
         aoa = getAoA(x_wing_g.flatten(), e_u_wing_g)
         AoA[timeStep, :] = aoa
-        liftVector_magnitude = np.sqrt(liftVector[0]**2 + liftVector[1]**2 + liftVector[2]**2)
+        liftVector_magnitude = np.sqrt(liftVector[0, 0]**2 + liftVector[0, 1]**2 + liftVector[0, 2]**2)
         if liftVector_magnitude != 0: 
             e_liftVector = liftVector / liftVector_magnitude
         else:
