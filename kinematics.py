@@ -392,10 +392,11 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         #print('theta:', np.degrees(parameters[6]))
 
         #velocity vector here 
-        u_wing_g_vector = u_wing_g.flatten()
+        u_wing_g_vector = u_wing_g
+        # print(u_wing_g_vector.shape)
         # u_wing_g_vector = np.sum(us_wing_g[timeStep], axis=0)
         u_wing_g_vectors [timeStep, :] = u_wing_g_vector
-        u_wing_g_magnitude = np.sqrt(u_wing_g_vector[0]**2 + u_wing_g_vector[1]**2 + u_wing_g_vector[2]**2)
+        u_wing_g_magnitude = np.sqrt(u_wing_g_vector[0, 0]**2 + u_wing_g_vector[0, 1]**2 + u_wing_g_vector[0, 2]**2)
         if u_wing_g_magnitude != 0:  
             e_u_wing_g = u_wing_g_vector/u_wing_g_magnitude
         else:
@@ -423,7 +424,9 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         #     liftVector *= 0 
         #     dragVector_wing_g *= 0 
        #aoa = getAoA(dragVector_wing_g, x_wing_g.flatten())
-        aoa = getAoA(x_wing_g.flatten(), e_u_wing_g)
+        # print(x_wing_g.shape)
+        # print(e_u_wing_g.shape)
+        aoa = getAoA(x_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1))
         AoA[timeStep, :] = aoa
         liftVector_magnitude = np.sqrt(liftVector[0, 0]**2 + liftVector[0, 1]**2 + liftVector[0, 2]**2)
         if liftVector_magnitude != 0: 
@@ -437,7 +440,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
     #validation of our u_wing_g: 
     #left and right derivative: 
     delta_t = timeline[1] - timeline[0]
-    verifying_us_wing_g = np.zeros((timeline.shape[0], 3))
+    verifying_us_wing_g = np.zeros((timeline.shape[0], wingPoints.shape[0], 3))
     for timeStep in range(timeline.shape[0]):
         currentGlobalPoint = globalPointsSequence[timeStep]
         leftGlobalPoint = globalPointsSequence[timeStep-1]

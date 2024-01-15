@@ -127,15 +127,15 @@ def main():
     F(x_final, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
     # print('K:', K)
 
-profile = cProfile()
-profile.enable()
-main()
-profile.disable()
-s = io.StringIO()
-ps = pstats.Stats(profile, stream=s).sort_stats('cumulative')
-ps.print_stats()
-with open('profile.txt', 'w') as file:
-    file.write(s.getvalue())
+# profile = cProfile()
+# profile.enable()
+# main()
+# profile.disable()
+# s = io.StringIO()
+# ps = pstats.Stats(profile, stream=s).sort_stats('cumulative')
+# ps.print_stats()
+# with open('profile.txt', 'w') as file:
+#     file.write(s.getvalue())
 
 # writeArraytoFile(Fl, 'lift.txt')
 # writeArraytoFile(Fd, 'drag.txt')
