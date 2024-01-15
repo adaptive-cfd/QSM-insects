@@ -246,13 +246,13 @@ def getAoA(x_wing_g, e_u_wing_g):
 #     return AoA  
         
 def load_kinematics_data(file='kinematics_data_for_QSM.csv'): 
-    t = np.zeros(shape=(1000, 3)) 
-    alpha = np.zeros(shape=(1000, 3)) 
-    phi = np.zeros(shape=(1000, 3)) 
-    theta = np.zeros(shape=(1000, 3)) 
-    alpha_dt = np.zeros(shape=(1000, 3)) 
-    phi_dt = np.zeros(shape=(1000, 3)) 
-    theta_dt = np.zeros(shape=(1000, 3)) 
+    t = np.zeros(shape=(1000, 1)) 
+    alpha = np.zeros(shape=(1000, 1)) 
+    phi = np.zeros(shape=(1000, 1)) 
+    theta = np.zeros(shape=(1000, 1)) 
+    alpha_dt = np.zeros(shape=(1000, 1)) 
+    phi_dt = np.zeros(shape=(1000, 1)) 
+    theta_dt = np.zeros(shape=(1000, 1)) 
 
     with open(file, 'r') as csv_file:
         reader = csv.reader(csv_file, delimiter=';') 
@@ -295,10 +295,9 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         phis_dt, alphas_dt, thetas_dt = create_wing_angles_dt(phis, alphas, thetas, timeline)
 
     print('alpha:', alphas.shape, '\n', 'timeline:', timeline.shape)
-    print('alpha:', alphas, '\n', 'timeline:', timeline)
+    print('alpha:', type(alphas), '\n', 'timeline:', type(timeline))
     db.writeArraytoFile(alphas, 'alphas.txt')
     db.writeArraytoFile(timeline, 'timeline.txt')
-    exit()
     alphas_interp = interp1d(timeline, alphas, fill_value='extrapolate')
     phis_interp = interp1d(timeline, phis, fill_value='extrapolate')
     thetas_interp = interp1d(timeline, thetas, fill_value='extrapolate')
