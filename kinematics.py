@@ -278,13 +278,13 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
 
         u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g.flatten())
 
-        u_mean_flow_g = u_wing_g + u_wind_g
+        u_flight_g = u_wing_g + u_wind_g
 
         u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix)
         us_wing_g[timeStep, :] = u_wing_g.reshape(3,1)
         us_wing_w[timeStep, :] = u_wing_w
 
-        u_wind_w = getWindDirectioninWingReferenceFrame(u_mean_flow_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
+        u_wind_w = getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
         us_wind_w[timeStep, :] = u_wind_w
 
         #velocity vector here 
