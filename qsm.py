@@ -6,6 +6,7 @@
 """
 ##%kinematics
 import os
+import csv
 os.environ['QTA_QP_PLATFORM'] = 'wayland'
 import numpy as np 
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from scipy.interpolate import interp1d
 from matplotlib import animation
 import functools 
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import insect_tools
+import insect_tools as it 
 from debug import writeArraytoFile
 
 """
@@ -72,17 +73,16 @@ def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, invert
          alpha = -alpha 
     rotationMatrix = np.matmul(
                                     np.matmul(
-                                            insect_tools.Ry(alpha),
-                                            insect_tools.Rz(theta)
+                                            it.Ry(alpha),
+                                            it.Rz(theta)
                                     ),
-                                    insect_tools.Rx(phi)
+                                    it.Rx(phi)
                                 )
     rotationMatrixTrans = np.transpose(rotationMatrix)  
     strokePoints = np.zeros((points.shape[0], 3))
     for point in range(points.shape[0]): 
         x_s = np.matmul(rotationMatrixTrans, points[point])
         strokePoints[point, :] = x_s
-   #print('\n\nrotation matrix wing to stroke', rotationMatrix, '\n\n tranpose of rotation matrix wing to stroke', rotationMatrixTrans)
     return strokePoints, [rotationMatrix, rotationMatrixTrans]
 
 
@@ -93,8 +93,8 @@ def convert_from_stroke_plane_to_body_reference_frame(points, parameters, invert
     if invert:
          flip_angle = np.pi
     rotationMatrix = np.matmul(
-                                insect_tools.Rx(flip_angle),
-                                insect_tools.Ry(eta)
+                                it.Rx(flip_angle),
+                                it.Ry(eta)
                                 )
     rotationMatrixTrans = np.transpose(rotationMatrix) 
     bodyPoints = np.zeros((points.shape[0], 3))
@@ -111,10 +111,10 @@ def convert_from_body_reference_frame_to_global_reference_frame(points, paramete
     gamma = parameters [2] #rad
     rotationMatrix = np.matmul(
                                     np.matmul(
-                                            insect_tools.Rx(psi),
-                                            insect_tools.Ry(beta)
+                                            it.Rx(psi),
+                                            it.Ry(beta)
                                     ),
-                                    insect_tools.Rz(gamma)
+                                    it.Rz(gamma)
                                 )
     rotationMatrixTrans = np.transpose(rotationMatrix)
     globalPoints = np.zeros((points.shape[0], 3))
@@ -144,9 +144,9 @@ def plot(points, title=''):
     #plt.show
 
 def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, phi, phi_dt, alpha, alpha_dt, theta, theta_dt): 
-    phiMatrixTrans = np.transpose(insect_tools.Rx(phi)) #np.transpose(getRotationMatrix('x', phi))
-    alphaMatrixTrans = np.transpose(insect_tools.Ry(alpha)) #np.transpose(getRotationMatrix('y', alpha))
-    thetaMatrixTrans = np.transpose(insect_tools.Rz(theta)) #np.transpose(getRotationMatrix('z', theta))
+    phiMatrixTrans = np.transpose(it.Rx(phi)) #np.transpose(getRotationMatrix('x', phi))
+    alphaMatrixTrans = np.transpose(it.Ry(alpha)) #np.transpose(getRotationMatrix('y', alpha))
+    thetaMatrixTrans = np.transpose(it.Rz(theta)) #np.transpose(getRotationMatrix('z', theta))
     vector_phi_dt = np.array([[phi_dt], [0], [0]])
     vector_alpha_dt = np.array([[0], [alpha_dt], [0]])
     vector_theta_dt = np.array([[0], [0], [theta_dt]])
@@ -218,7 +218,8 @@ def load_kinematics_data(file='kinematics_data_for_QSM.csv'):
 def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, number_of_timesteps=360, frequency=1, useCFDData=True):
     u_wind_g = np.array([0, 0, 0])
 
-    timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data()
+    timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
+    # timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = it.load_t_file('kinematics_data_for_QSM.csv')
         
     alphas_interp = interp1d(timeline.flatten(), alphas.flatten(), fill_value='extrapolate')
     phis_interp = interp1d(timeline.flatten(), phis.flatten(), fill_value='extrapolate')
@@ -415,7 +416,6 @@ kinematics()
 
 ############################################################################################################################################################################################
 ##% dynamics
-import csv
 
 def getAerodynamicCoefficients(x0, AoA): 
     deg2rad = np.pi/180.0 
@@ -502,9 +502,6 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         Fl[i,:] = (Fl_mag[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_mag[i] * dragVectors_wing_g[i])
 
-    # Fl = np.array(Fl)
-    Fd = np.array(Fd)
-
     Fx_QSM = Fl[:, 0]+Fd[:, 0]
     Fy_QSM = Fl[:, 1]+Fd[:, 1]
     Fz_QSM = Fl[:, 2]+Fd[:, 2]
@@ -539,10 +536,11 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd)
     return K 
 
-####Optimization 
+###optimization 
 def main():
     timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
-    t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data()
+    t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
+    # t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces_data_for_QSM.csv')
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
     Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
     Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
