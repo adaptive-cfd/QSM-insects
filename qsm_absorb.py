@@ -443,11 +443,10 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     y_space = np.linspace(min_y, max_y, 100)
 
     c = getChordLength(wingPoints, y_space)
-    c_norm = c / np.max(c)
-    c_norm_interpolation = interp1d(y_space, c_norm)
+    c_interpolation = interp1d(y_space, c)
 
     def Cr2(r): 
-        return c_norm_interpolation(r) * r**2
+        return c_interpolation(r) * r**2
     #fxn evaluated at the intervals 
     
     F_r = Cr2(y_space)

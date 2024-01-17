@@ -441,13 +441,12 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     min_y = np.min(wingPoints[:, 1])
     max_y = np.max(wingPoints[:, 1])
     y_space = np.linspace(min_y, max_y, 100)
-    
+
     c = getChordLength(wingPoints, y_space)
-    c_norm = c / np.max(c)
-    c_norm_interpolation = interp1d(y_space, c_norm)
+    c_interpolation = interp1d(y_space, c)
 
     def Cr2(r): 
-        return c_norm_interpolation(r) * r**2
+        return c_interpolation(r) * r**2
     # fxn evaluated at the intervals 
 
     F_r = Cr2(y_space)
@@ -455,7 +454,7 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
 
     planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
     rho = 1.225
-    cr = c_norm
+    cr = c
     br = y_space[1]-y_space[0]
     Fl_BEM_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
     Fd_BEM_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
