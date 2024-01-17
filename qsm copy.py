@@ -446,7 +446,7 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     #fxn evaluated at the intervals 
     
     F_r = Cr2(y_space)
-    I = np.trapz(F_r, y_space)
+    I = trapz(F_r, y_space)
     planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
     rho = 1.225
     Fl_mag = 0.5*rho*cl*planar_rot_w_squared*I
