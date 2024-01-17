@@ -164,7 +164,7 @@ def getAoA(x_wing_g, e_u_wing_g):
 #     AoA = np.arctan2(np.linalg.norm(np.cross(x_wing_g, drag_vector)), np.dot(-drag_vector, x_wing_g.reshape(3,1))) #rad
 #     return AoA  
         
-def load_kinematics_data(file='kinematics_data_for_QSM.csv'): 
+def load_kinematics_data(file): 
     t = np.zeros(shape=(1000, 1)) 
     alpha = np.zeros(shape=(1000, 1)) 
     phi = np.zeros(shape=(1000, 1)) 
@@ -193,7 +193,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
     u_wind_g = np.array([0, 0, 0])
 
     timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
-    # timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = it.load_t_file('kinematics_data_for_QSM.csv')
+    # timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = it.load_t_file('kinematics.t')
         
     alphas_interp = interp1d(timeline.flatten(), alphas.flatten(), fill_value='extrapolate')
     phis_interp = interp1d(timeline.flatten(), phis.flatten(), fill_value='extrapolate')
@@ -392,7 +392,7 @@ def getAerodynamicCoefficients(x0, AoA):
     
     return cl, cd
 
-def load_forces_data(file = 'forces_data_for_QSM.csv'):
+def load_forces_data(file):
     t = [] 
     Fx = [] 
     Fy = [] 
@@ -499,11 +499,12 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
 def main():
     timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
     t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
-    # t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces_data_for_QSM.csv')
+    # t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces.t')
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
     Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
     Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
-    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data() 
+    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data('kinematics_data_for_QSM.csv') 
+    # t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = it.load_t_file('kinematics.t')
     x_0 = [0.03433548, -0.01193863,  0.0338657,  -0.023361]
     bounds = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
     optimize = True
