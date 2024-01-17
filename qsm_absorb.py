@@ -449,8 +449,8 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     I = trapz(F_r, y_space)
     planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
     rho = 1.225
-    Fl_mag = 0.5*rho*cl*planar_rot_w_squared*I
-    Fd_mag = 0.5*rho*cd*planar_rot_w_squared*I
+    Fl_mag = cl*planar_rot_w_squared
+    Fd_mag = cd*planar_rot_w_squared
 
     Fl = np.zeros((timeline.shape[0], 3))
     Fd = np.zeros((timeline.shape[0], 3))
