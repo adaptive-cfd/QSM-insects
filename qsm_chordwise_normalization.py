@@ -436,8 +436,9 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     min_y = np.min(wingPoints[:, 1])
     max_y = np.max(wingPoints[:, 1])
     y_space = np.linspace(min_y, max_y, 100)
-
     c = getChordLength(wingPoints, y_space)
+
+    #chordwise normalization 
     c_norm = c / np.max(c)
     c_norm_interpolation = interp1d(y_space, c_norm)
 
