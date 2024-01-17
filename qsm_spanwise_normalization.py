@@ -431,26 +431,30 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.xlabel('t/T')
         plt.legend()
         plt.show()
-        
 
+    # spanwise normalization   
+    min_y = np.min(wingPoints[:, 1])
+    max_y = np.max(wingPoints[:, 1])
+    diff = max_y-min_y
+    wingPoints = wingPoints/diff
     min_y = np.min(wingPoints[:, 1])
     max_y = np.max(wingPoints[:, 1])
     y_space = np.linspace(min_y, max_y, 100)
 
     c = getChordLength(wingPoints, y_space)
-    c_norm = c / np.max(c)
-    c_norm_interpolation = interp1d(y_space, c_norm)
+    c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
 
+    # define function to integrate 
     def Cr2(r): 
-        return c_norm_interpolation(r) * r**2
+        return c_interpolation(r) * r**2
     #fxn evaluated at the intervals 
     
     F_r = Cr2(y_space)
-    I = trapz(F_r, y_space)
+    I = trapz(F_r, y_space) # integrate F_r along y_space 
     planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
     rho = 1.225
-    Fl_mag = cl*planar_rot_w_squared
-    Fd_mag = cd*planar_rot_w_squared
+    Fl_mag = 0.5*rho*cl*planar_rot_w_squared*I
+    Fd_mag = 0.5*rho*cd*planar_rot_w_squared*I
 
     Fl = np.zeros((timeline.shape[0], 3))
     Fd = np.zeros((timeline.shape[0], 3))
