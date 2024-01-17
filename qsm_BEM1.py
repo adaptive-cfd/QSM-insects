@@ -433,9 +433,15 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.show()
         
 
+     # spanwise normalization   
+    min_y = np.min(wingPoints[:, 1])
+    max_y = np.max(wingPoints[:, 1])
+    diff = max_y-min_y
+    wingPoints = wingPoints/diff
     min_y = np.min(wingPoints[:, 1])
     max_y = np.max(wingPoints[:, 1])
     y_space = np.linspace(min_y, max_y, 100)
+
     c = getChordLength(wingPoints, y_space)
     c_norm = c / np.max(c)
     c_norm_interpolation = interp1d(y_space, c_norm)
