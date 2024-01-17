@@ -83,7 +83,7 @@ def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, invert
     for point in range(points.shape[0]): 
         x_s = np.matmul(rotationMatrixTrans, points[point])
         strokePoints[point, :] = x_s
-    return strokePoints, [rotationMatrix, rotationMatrixTrans]
+    return strokePoints, rotationMatrix, rotationMatrixTrans
 
 
 def convert_from_stroke_plane_to_body_reference_frame(points, parameters, invert=False):
@@ -101,7 +101,7 @@ def convert_from_stroke_plane_to_body_reference_frame(points, parameters, invert
     for point in range(points.shape[0]): 
         x_b = np.matmul(rotationMatrixTrans, points[point])
         bodyPoints[point,:] = x_b
-    return bodyPoints, [rotationMatrix, rotationMatrixTrans]
+    return bodyPoints, rotationMatrix, rotationMatrixTrans
 
 def convert_from_body_reference_frame_to_global_reference_frame(points, parameters):
     #points passed into this fxn must be in the body reference frame x(b) y(b) z(b)
@@ -121,27 +121,7 @@ def convert_from_body_reference_frame_to_global_reference_frame(points, paramete
     for point in range(points.shape[0]): 
         x_g = np.matmul(rotationMatrixTrans, points[point])
         globalPoints[point, :] = x_g 
-    return globalPoints, [rotationMatrix, rotationMatrixTrans]
-
-def plot(points, title=''):
-    X = points[:, 0]
-    Y = points[:, 1]
-    Z = points[:, 2]
-    #no axis so create one
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    #use class axis to plot
-
-   # ax.plot_trisurf(X, Y, Z, color ='#969f65', )
-    ax.scatter(X, Y, Z)
-    ax.set_xlim([-4, 4])
-    ax.set_ylim([-4, 4])
-    ax.set_zlim([-4, 4])
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
-    ax.set_title(title)
-    #plt.show
+    return globalPoints, rotationMatrix, rotationMatrixTrans
 
 def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, phi, phi_dt, alpha, alpha_dt, theta, theta_dt): 
     phiMatrixTrans = np.transpose(it.Rx(phi)) #np.transpose(getRotationMatrix('x', phi))
@@ -151,8 +131,6 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
     vector_alpha_dt = np.array([[0], [alpha_dt], [0]])
     vector_theta_dt = np.array([[0], [0], [theta_dt]])
     rot_wing_s = np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt+np.matmul(alphaMatrixTrans, vector_alpha_dt)))))
-    # print('shape', rot_wing_s.shape)
-    # print(rot_wing_s)
     rot_wing_b = np.matmul(strokeRotationMatrixTrans, rot_wing_s)
     rot_wing_w = np.matmul(wingRotationMatrix, rot_wing_s)
     rot_wing_g = np.matmul(bodyRotationMatrixTrans, rot_wing_b)
@@ -160,25 +138,21 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
 
 def generate_u_wing_g_position(rot_wing_g, y_wing_g):
     # #omega x point
-    # #keep in mind that omega is a COLUMN vector and wing_point is a ROW vector. omega has to be converted to a ROW vector in order to calculate the x product
-    rot_wing_g = rot_wing_g.reshape(1,3) #either we flatten rot_wing_g or we reshape y_wing_g.reshape(3, 1)
+    #both input vectors have to be reshaped to (1,3) to meet the requirements of np.cross (last axis of both vectors -> 2 or 3). to that end either reshape(1,3) or flatten() kommen in frage
+    rot_wing_g = rot_wing_g.reshape(1,3)  
+    y_wing_g = y_wing_g.reshape(1,3)
     u_wing_g_position = np.cross(rot_wing_g, y_wing_g)
-    #print('shape u_wing_g_position', u_wing_g_position.shape)
     return u_wing_g_position
 
 def generate_u_wing_w(u_wing_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix):
     rotationMatrix = np.matmul(np.matmul(bodyRotationMatrix, strokeRotationMatrix), wingRotationMatrix)
     u_wing_w = np.matmul(rotationMatrix, u_wing_g)
-    #print('shape u_wing_w', u_wing_w.shape)
     return u_wing_w
 
 def getWindDirectioninWingReferenceFrame(u_wind_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix): 
     u_wind_b = np.matmul(bodyRotationMatrix, u_wind_g.reshape(3,1))
-    # print(u_wind_b.shape)
     u_wind_s = np.matmul(strokeRotationMatrix, u_wind_b)
-    # print(u_wind_s.shape)
     u_wind_w = np.matmul(wingRotationMatrix, u_wind_s)
-    # print(u_wind_w.shape)
     return u_wind_w
 
 def getAoA(x_wing_g, e_u_wing_g):
@@ -240,13 +214,11 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
 
     us_wind_w = np.zeros((timeline.shape[0], 3, 1))
     AoA = np.zeros((timeline.shape[0], 1))
-    u_wing_g_vectors = np.zeros((timeline.shape[0], 3)) 
     dragVectors_wing_g = np.zeros((timeline.shape[0], 3))
     liftVectors = np.zeros((timeline.shape[0], 3))
     e_liftVectors = np.zeros((timeline.shape[0], 3))
 
     delta_t = timeline[1] - timeline[0]
-    #print(delta_t)
 
     for timeStep in range(timeline.shape[0]):
         t = timeline[timeStep]
@@ -258,9 +230,9 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         parameters = [0, 0, 0, -80*np.pi/180, phis_interp(t), alphas_interp(t), thetas_interp(t)] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
         parameters_dt = [0, 0, 0, 0, phis_dt, alphas_dt, thetas_dt]
 
-        strokePoints, [wingRotationMatrix, wingRotationMatrixTrans] = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
-        bodyPoints, [strokeRotationMatrix, strokeRotationMatrixTrans] = convert_from_stroke_plane_to_body_reference_frame(strokePoints, parameters)
-        globalPoints, [bodyRotationMatrix, bodyRotationMatrixTrans] = convert_from_body_reference_frame_to_global_reference_frame(bodyPoints, parameters)
+        strokePoints, wingRotationMatrix, wingRotationMatrixTrans = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
+        bodyPoints, strokeRotationMatrix, strokeRotationMatrixTrans = convert_from_stroke_plane_to_body_reference_frame(strokePoints, parameters)
+        globalPoints, bodyRotationMatrix, bodyRotationMatrixTrans = convert_from_body_reference_frame_to_global_reference_frame(bodyPoints, parameters)
         
         strokePointsSequence[timeStep, :] = strokePoints
         bodyPointsSequence[timeStep, :] = bodyPoints
@@ -268,7 +240,6 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
 
         x_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
         y_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
-        #print('x_wing_g:', x_wing_g, '\n', 'y_wing_g:', y_wing_g)
 
         rot_wing_g, rot_wing_b, rot_wing_w = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
                                     parameters_dt[5], parameters[6], parameters_dt[6])
@@ -277,25 +248,21 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         rots_wing_w[timeStep, :] = rot_wing_w
         rots_wing_g[timeStep, :] = rot_wing_g
 
-        u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g.flatten())
+        u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g)
 
         u_flight_g = u_wing_g + u_wind_g
 
         u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix)
         us_wing_g[timeStep, :] = u_wing_g.reshape(3,1)
         us_wing_w[timeStep, :] = u_wing_w
-
         u_wind_w = getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
         us_wind_w[timeStep, :] = u_wind_w
 
-        #velocity vector here 
-        u_wing_g_vector = u_wing_g
-        u_wing_g_vectors [timeStep, :] = u_wing_g_vector
-        u_wing_g_magnitude = np.sqrt(u_wing_g_vector[0, 0]**2 + u_wing_g_vector[0, 1]**2 + u_wing_g_vector[0, 2]**2)
+        u_wing_g_magnitude = np.sqrt(u_wing_g[0, 0]**2 + u_wing_g[0, 1]**2 + u_wing_g[0, 2]**2)
         if u_wing_g_magnitude != 0:  
-            e_u_wing_g = u_wing_g_vector/u_wing_g_magnitude
+            e_u_wing_g = u_wing_g/u_wing_g_magnitude
         else:
-            e_u_wing_g = u_wing_g_vector 
+            e_u_wing_g = u_wing_g 
         dragVector_wing_g = -e_u_wing_g
         dragVectors_wing_g[timeStep, :] = dragVector_wing_g
     
@@ -328,9 +295,9 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
         RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
         verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
     verifying_us_wing_g = verifying_us_wing_g  
-    return timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors
+    return timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, us_wing_g, dragVectors_wing_g, e_liftVectors
 
-def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, pivot_index, Fl, Fd, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, timeStep): 
+def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, pivot_index, Fl, Fd, dragVectors_wing_g, e_liftVectors, timeStep): 
     #get point set by timeStep number
     points = pointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
     #clear the current axis 
@@ -373,7 +340,7 @@ def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, piv
     ax.add_collection3d(Poly3DCollection(verts=[XZ_plane_shadow], color='#d3d3d3'))
     
     #plotting the vector x, y, z, u, v, w
-    u_wing_g_vector = u_wing_g_vectors[timeStep]
+    u_wing_g = us_wing_g[timeStep]
     ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], u_wing_g_vector[0], u_wing_g_vector[1], u_wing_g_vector[2], color='orange', label=r'$\overrightarrow{u}^{(g)}_w$' )
     # print('u_wing_g vector', u_wing_g_vector)
     dragVector_wing_g = dragVectors_wing_g[timeStep]
@@ -394,10 +361,10 @@ def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, piv
     ax.set_zlabel('z')
     ax.set_title(f'Timestep: {timeStep} \n⍺: {np.round(np.degrees(alphas[timeStep]), 2)} \nAoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd: {np.round(Fd[timeStep], 4)}')
     
-def generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd): 
+def generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd): 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    anim = animation.FuncAnimation(fig, functools.partial(animationPlot, ax, alphas, globalPointsSequence, us_wing_g, AoA,wingtip_index, pivot_index, Fl, Fd, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors), frames=len(timeline), repeat=True)
+    anim = animation.FuncAnimation(fig, functools.partial(animationPlot, ax, alphas, globalPointsSequence, us_wing_g, AoA,wingtip_index, pivot_index, Fl, Fd, us_wing_g, dragVectors_wing_g, e_liftVectors), frames=len(timeline), repeat=True)
     #anim.save('u&d_vectors.gif') 
     plt.show() 
 
@@ -407,13 +374,11 @@ def kinematics():
     pivot_index = -8
     wingPoints = parse_wing_file(wing_file, 0.001, pivot_index)
     wingtip_index = 17
-
     #create figure 
-    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors = generateSequence(wingPoints, wingtip_index, pivot_index, frequency=10, number_of_timesteps=360, useCFDData=True)
+    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, us_wing_g, dragVectors_wing_g, e_liftVectors = generateSequence(wingPoints, wingtip_index, pivot_index, frequency=10, number_of_timesteps=360, useCFDData=True)
     #generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, wingtip_index, pivot_index)
-    return timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index
+    return timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, us_wing_g, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index
 kinematics()
-
 ############################################################################################################################################################################################
 ##% dynamics
 
@@ -454,7 +419,7 @@ from scipy.integrate import trapz
 import scipy.optimize as opt
 import time
 
-def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, show_plots=False):
+def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, show_plots=False):
     cl, cd = getAerodynamicCoefficients(x, np.array(AoA))
     if show_plots: 
         # plt.plot(timeline, np.degrees(phis), label='ɸ')
@@ -475,21 +440,16 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
 
     c = getChordLength(wingPoints, y_space)
     c_norm = c / np.max(c)
-    #print(c_norm)
-
-    #y_space = y_space/40
     c_norm_interpolation = interp1d(y_space, c_norm)
 
 
     def Cr2(r): 
         return c_norm_interpolation(r) * r**2
     #fxn evaluated at the intervals 
+    
     F_r = Cr2(y_space)
-
     I = trapz(F_r, y_space)
     planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
-    # print(planar_rot_w_squared.shape)
-
     rho = 1.225
     Fl_mag = 0.5*rho*cl*planar_rot_w_squared*I
     Fd_mag = 0.5*rho*cd*planar_rot_w_squared*I
@@ -497,8 +457,6 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     Fl = np.zeros((timeline.shape[0], 3))
     Fd = np.zeros((timeline.shape[0], 3))
     for i in range(timeline.shape[0]):
-        # print(e_liftVectors.shape)
-        # print(Fl_mag.shape)
         Fl[i,:] = (Fl_mag[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_mag[i] * dragVectors_wing_g[i])
 
@@ -512,7 +470,6 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         K = K_num/K_den
     else:
         K = K_num
-    #print('K:', K)
     if show_plots:
         graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
         gCl, gCd = getAerodynamicCoefficients(x, graphAoA)
@@ -533,12 +490,12 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.legend()
         plt.show()
 
-        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd)
+        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, us_wing_g, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd)
     return K 
 
 ###optimization 
 def main():
-    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
+    timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, us_wing_g, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
     t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
     # t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces_data_for_QSM.csv')
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
@@ -550,7 +507,7 @@ def main():
     optimize = True
     if optimize:
         start = time.time()
-        optimization = opt.differential_evolution(F, args=(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD), bounds=bounds, x0=x_0, maxiter=20)
+        optimization = opt.differential_evolution(F, args=(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD), bounds=bounds, x0=x_0, maxiter=20)
         x_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
@@ -559,5 +516,5 @@ def main():
         K_final = 0.09349021020747196
 
     print('x0_final: ', x_final, 'K_final: ', K_final)
-    F(x_final, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, u_wing_g_vectors, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
+    F(x_final, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fx_CFD_interp, Fy_CFD_interp, Fz_CFD_interp, Fx_CFD, Fy_CFD, Fz_CFD, True)
 main()
