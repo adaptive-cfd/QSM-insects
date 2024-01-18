@@ -452,18 +452,20 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     F_r = Cr2(y_space)
     I = trapz(F_r, y_space)
 
-    planar_rot_w_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
+    planar_rot_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
     rho = 1.225
     cr = c
     br = y_space[1]-y_space[0]
     Fl_BEM_magnitude = np.zeros(timeline.shape[0])
     Fd_BEM_magnitude = np.zeros(timeline.shape[0])
 
-    #calculation of the magnitude of the lift force for each blade 
+    #calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
+    #each row represents a timestep and the value contained therein the total Fl/Fd for that time
     for i in range(y_space.shape[0]):
-        Fl_BEM_magnitude += 0.5*rho*cl.reshape(101,)*planar_rot_w_squared.reshape(101,)*((y_space[i]-y_space[0])**2)*cr[i]*br 
-        Fd_BEM_magnitude += 0.5*rho*cd.reshape(101,)*planar_rot_w_squared.reshape(101,)*((y_space[i]-y_space[0])**2)*cr[i]*br 
-    
+        Fl_BEM_magnitude += 0.5*rho*cl.reshape(101,)*planar_rot_squared.reshape(101,)*((y_space[i]-y_space[0])**2)*cr[i]*br 
+        Fd_BEM_magnitude += 0.5*rho*cd.reshape(101,)*planar_rot_squared.reshape(101,)*((y_space[i]-y_space[0])**2)*cr[i]*br 
+
+    #vector calculation of the lift and drag forces. arrays of the form (101, 3) 
     Fl_BEM = np.zeros((timeline.shape[0], 3))
     Fd_BEM = np.zeros((timeline.shape[0], 3))
     for i in range(timeline.shape[0]):
