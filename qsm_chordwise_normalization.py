@@ -448,7 +448,7 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     
     F_r = Cr2(y_space)
     I = trapz(F_r, y_space)
-    planar_rot_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 
+    planar_rot_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 #planar angular velocity 𝛀(φ, Θ)
     rho = 1.225
     Fl_mag = 0.5*rho*cl*planar_rot_squared*I
     Fd_mag = 0.5*rho*cd*planar_rot_squared*I
