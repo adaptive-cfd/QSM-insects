@@ -432,7 +432,6 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.legend()
         plt.show()
         
-    
     planar_rot_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 #planar angular velocity 𝛀(φ, Θ)
     rho = 1.225
     Fl_mag = cl*planar_rot_squared

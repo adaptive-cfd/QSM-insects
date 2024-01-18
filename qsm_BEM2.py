@@ -445,13 +445,6 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     c = getChordLength(wingPoints, y_space)
     c_interpolation = interp1d(y_space, c)
 
-    def Cr2(r): 
-        return c_interpolation(r) * r**2
-    # fxn evaluated at the intervals 
-
-    F_r = Cr2(y_space)
-    I = trapz(F_r, y_space)
-
     planar_rot_squared = rots_wing_w[:, 0]**2 + rots_wing_w[:, 2]**2 #planar angular velocity 𝛀(φ, Θ)
     rho = 1.225
     cr = c
@@ -460,7 +453,7 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     Fd_BEM_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
 
     #calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
-    #each row represents a timestep and the value contained therein the total Fl/Fd for that time
+    #each row represents a timestep and the value contained therein the total Fl/Fd for that timestep
     for i in range(timeline.shape[0]):
         Fl_BEM_magnitude[i, :] = 0.5*rho*cl[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
         Fd_BEM_magnitude[i, :] = 0.5*rho*cd[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
@@ -469,8 +462,8 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     Fl_BEM = np.zeros((timeline.shape[0], 3))
     Fd_BEM = np.zeros((timeline.shape[0], 3))
     for i in range(timeline.shape[0]):
-        Fl_BEM[i,:] = (np.sum(Fl_BEM_magnitude[i,:]) * e_liftVectors[i]) #here we sum up the individual lift blade forces
-        Fd_BEM[i,:] = (np.sum(Fd_BEM_magnitude[i,:]) * dragVectors_wing_g[i]) #here we sum up the individual drag blade forces
+        Fl_BEM[i,:] = (np.sum(Fl_BEM_magnitude[i,:]) * e_liftVectors[i]) #here we sum up the individual lift blade forces and calculate the lift vector
+        Fd_BEM[i,:] = (np.sum(Fd_BEM_magnitude[i,:]) * dragVectors_wing_g[i]) #here we sum up the individual drag blade forces and calculate the drag vector
 
     Fx_QSM = Fl_BEM[:, 0]+Fd_BEM[:, 0]
     Fy_QSM = Fl_BEM[:, 1]+Fd_BEM[:, 1]
