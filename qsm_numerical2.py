@@ -297,7 +297,7 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
     verifying_us_wing_g = verifying_us_wing_g  
     return timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors
 
-def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, pivot_index, Fl_BEM, Fd_BEM, dragVectors_wing_g, e_liftVectors, timeStep): 
+def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, pivot_index, Fl, Fd, dragVectors_wing_g, e_liftVectors, timeStep): 
     #get point set by timeStep number
     points = pointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
     #clear the current axis 
@@ -358,12 +358,12 @@ def animationPlot(ax, alphas, pointsSequence, us_wing_g, AoA, wingtip_index, piv
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
-    ax.set_title(f'Timestep: {timeStep} \n⍺: {np.round(np.degrees(alphas[timeStep]), 2)} \nAoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl_BEM: {np.round(Fl_BEM[timeStep], 4)} \nFd_blade: {np.round(Fd_BEM[timeStep], 4)}')
+    ax.set_title(f'Timestep: {timeStep} \n⍺: {np.round(np.degrees(alphas[timeStep]), 2)} \nAoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd_blade: {np.round(Fd[timeStep], 4)}')
     
-def generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl_BEM, Fd_BEM): 
+def generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd): 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    anim = animation.FuncAnimation(fig, functools.partial(animationPlot, ax, alphas, globalPointsSequence, us_wing_g, AoA,wingtip_index, pivot_index, Fl_BEM, Fd_BEM, dragVectors_wing_g, e_liftVectors), frames=len(timeline), repeat=True)
+    anim = animation.FuncAnimation(fig, functools.partial(animationPlot, ax, alphas, globalPointsSequence, us_wing_g, AoA,wingtip_index, pivot_index, Fl, Fd, dragVectors_wing_g, e_liftVectors), frames=len(timeline), repeat=True)
     #anim.save('u&d_vectors.gif') 
     plt.show() 
 
@@ -449,25 +449,24 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     rho = 1.225
     cr = c
     br = y_space[1]-y_space[0]
-    Fl_BEM_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
-    Fd_BEM_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
+    Fl_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
+    Fd_magnitude = np.zeros((timeline.shape[0], y_space.shape[0]))
 
     #calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
     #each row represents a timestep and the value contained therein the total Fl/Fd for that timestep
     for i in range(timeline.shape[0]):
-        Fl_BEM_magnitude[i, :] = 0.5*rho*cl[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
-        Fd_BEM_magnitude[i, :] = 0.5*rho*cd[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
-
+        Fl_magnitude[i, :] = 0.5*rho*cl[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
+        Fd_magnitude[i, :] = 0.5*rho*cd[i]*planar_rot_squared[i]*((y_space-y_space[0])**2)*cr*br 
     
-    Fl_BEM = np.zeros((timeline.shape[0], 3))
-    Fd_BEM = np.zeros((timeline.shape[0], 3))
+    Fl = np.zeros((timeline.shape[0], 3))
+    Fd = np.zeros((timeline.shape[0], 3))
     for i in range(timeline.shape[0]):
-        Fl_BEM[i,:] = (np.sum(Fl_BEM_magnitude[i,:]) * e_liftVectors[i]) #here we sum up the individual lift blade forces and calculate the lift vector
-        Fd_BEM[i,:] = (np.sum(Fd_BEM_magnitude[i,:]) * dragVectors_wing_g[i]) #here we sum up the individual drag blade forces and calculate the drag vector
+        Fl[i,:] = (np.sum(Fl_magnitude[i,:]) * e_liftVectors[i]) #here we sum up the individual lift blade forces and calculate the lift vector
+        Fd[i,:] = (np.sum(Fd_magnitude[i,:]) * dragVectors_wing_g[i]) #here we sum up the individual drag blade forces and calculate the drag vector
 
-    Fx_QSM = Fl_BEM[:, 0]+Fd_BEM[:, 0]
-    Fy_QSM = Fl_BEM[:, 1]+Fd_BEM[:, 1]
-    Fz_QSM = Fl_BEM[:, 2]+Fd_BEM[:, 2]
+    Fx_QSM = Fl[:, 0]+Fd[:, 0]
+    Fy_QSM = Fl[:, 1]+Fd[:, 1]
+    Fz_QSM = Fl[:, 2]+Fd[:, 2]
 
     K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline))
     K_den = np.linalg.norm(Fx_CFD_interp(timeline) + np.linalg.norm(Fz_CFD_interp(timeline)))
@@ -495,18 +494,18 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         plt.legend()
         plt.show()
 
-        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl_BEM, Fd_BEM)
+        generatePlotsForKinematicsSequence(timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index, Fl, Fd)
     return K 
 
 ###optimization 
 def main():
     timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequence, wingPoints, phis, alphas, thetas, rots_wing_b, rots_wing_w, us_wing_w, us_wing_g, verifying_us_wing_g, us_wind_w, AoA, dragVectors_wing_g, e_liftVectors, wingtip_index, pivot_index = kinematics()
-    # t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
-    t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces.t')
+    t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
+    # t, Fx_CFD, Fy_CFD, Fz_CFD = it.load_t_file('forces.t')
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
     Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
     Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
-    # t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data('kinematics_data_for_QSM.csv') 
+    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data('kinematics_data_for_QSM.csv') 
     x_0 = [0.03433548, -0.01193863,  0.0338657,  -0.023361]
     bounds = [(-2, 2), (-2, 2), (-2, 2), (-2, 2)]
     optimize = True
