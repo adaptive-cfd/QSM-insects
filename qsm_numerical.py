@@ -95,15 +95,24 @@ pivot_index = -8
 wingPoints = parse_wing_file(wing_file, 0.001, pivot_index)
 wingtip_index = 17
 
+# spanwise normalization   
+min_y = np.min(wingPoints[:, 1])
+max_y = np.max(wingPoints[:, 1])
+diff = max_y-min_y
+wingPoints_normalization = wingPoints/diff
+min_y = np.min(wingPoints_normalization[:, 1])
+max_y = np.max(wingPoints_normalization[:, 1])
+R = max_y - min_y
+
 u_wind_g = np.array([0, 0, 0])
 
-# timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
+timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
 
-kinematics_cfd = it.load_t_file('kinematics_musca_intact.t')
-timeline = kinematics_cfd[:,0].flatten()
-alphas = kinematics_cfd[:,8].flatten()
-phis = kinematics_cfd[:,9].flatten()
-thetas = kinematics_cfd[:,10].flatten()
+# kinematics_cfd = it.load_t_file('kinematics_musca_intact.t')
+# timeline = kinematics_cfd[:,0].flatten()
+# alphas = kinematics_cfd[:,8].flatten()
+# phis = kinematics_cfd[:,9].flatten()
+# thetas = kinematics_cfd[:,10].flatten()
 
 # timeline, xc_body_g_x, xc_body_g_y, xc_body_g_z, psi, beta, gamma, eta_stroke, alphas, phis, thetas, alpha_r, phi_r, theta_r, rot_rel_l_w_x, rot_rel_l_w_y, rot_rel_l_w_z, rot_rel_r_w_x, rot_rel_r_w_y, rot_rel_r_w_z, rot_dt_l_w_x, rot_dt_l_w_y, rot_dt_l_w_z, rot_dt_r_w_x, rot_dt_r_w_y, rot_dt_r_w_z = it.load_t_file('kinematics_musca_intact.t')  
 alphas_interp = interp1d(timeline.flatten(), alphas.flatten(), fill_value='extrapolate')
@@ -140,7 +149,8 @@ e_dragVectors_wing_g = np.zeros((timeline.shape[0], 3))
 liftVectors = np.zeros((timeline.shape[0], 3))
 e_liftVectors = np.zeros((timeline.shape[0], 3))
 
-z_wing_gSequence = np.zeros((timeline.shape[0], 3))
+y_wing_g_sequence = np.zeros((timeline.shape[0], 3))
+z_wing_g_sequence = np.zeros((timeline.shape[0], 3))
 
 delta_t = timeline[1] - timeline[0]
 
@@ -251,8 +261,8 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
     vector_alpha_dt = np.array([[0], [alpha_dt], [0]])
     vector_theta_dt = np.array([[0], [0], [theta_dt]])
     rot_wing_s = np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt+np.matmul(alphaMatrixTrans, vector_alpha_dt)))))
-    rot_wing_b = np.matmul(strokeRotationMatrixTrans, rot_wing_s)
     rot_wing_w = np.matmul(wingRotationMatrix, rot_wing_s)
+    rot_wing_b = np.matmul(strokeRotationMatrixTrans, rot_wing_s)
     rot_wing_g = np.matmul(bodyRotationMatrixTrans, rot_wing_b)
     planar_rot_wing_g = np.matmul(bodyRotationMatrixTrans, np.matmul(strokeRotationMatrixTrans, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))))
     return rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g #these are all (3x1) vectors 
@@ -260,8 +270,6 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
 def generate_u_wing_g_position(rot_wing_g, y_wing_g):
     # #omega x point
     #both input vectors have to be reshaped to (1,3) to meet the requirements of np.cross (last axis of both vectors -> 2 or 3). to that end either reshape(1,3) or flatten() kommen in frage
-    rot_wing_g = rot_wing_g.reshape(1,3)  
-    y_wing_g = y_wing_g.reshape(1,3)
     u_wing_g_position = np.cross(rot_wing_g, y_wing_g)
     return u_wing_g_position
 
@@ -314,12 +322,14 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         bodyPointsSequence[timeStep, :] = bodyPoints
         globalPointsSequence[timeStep, :] = globalPoints
 
+        # y_wing_g coincides with the tip only if R is normalized. 
         x_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
         y_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
         z_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [0], [1]]))
-
-        z_wing_gSequence[timeStep, :] = z_wing_g.flatten()
-
+    
+        y_wing_g_sequence[timeStep, :] = y_wing_g.flatten()
+        z_wing_g_sequence[timeStep, :] = z_wing_g.flatten()
+        
         rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
                                     parameters_dt[5], parameters[6], parameters_dt[6])
         
@@ -328,7 +338,7 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         rots_wing_g[timeStep, :] = rot_wing_g
         planar_rots_wing_g[timeStep, :] = planar_rot_wing_g
 
-        u_wing_g = generate_u_wing_g_position(rot_wing_g, y_wing_g)
+        u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), y_wing_g.reshape(1,3))
 
         u_flight_g = u_wing_g + u_wind_g
 
@@ -488,14 +498,7 @@ def F(x, show_plots=False):
         plt.show()
         
 
-     # spanwise normalization   
-    min_y = np.min(wingPoints[:, 1])
-    max_y = np.max(wingPoints[:, 1])
-    diff = max_y-min_y
-    wingPoints_normalization = wingPoints/diff
-    min_y = np.min(wingPoints_normalization[:, 1])
-    max_y = np.max(wingPoints_normalization[:, 1])
-    R = max_y - min_y
+    # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
     c = getChordLength(wingPoints_normalization, y_space) 
     # c_mean = np.mean(c)
@@ -512,32 +515,51 @@ def F(x, show_plots=False):
     Fd_magnitude = np.zeros(timeline.shape[0])
     Frot_magnitude = np.zeros(timeline.shape[0])
 
-    planar_rots_wing_g_norm = np.linalg.norm(planar_rots_wing_g, axis=1)
+    # c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
+
+    # # define function to integrate 
+    # def Cr2(r): 
+    #     return c_interpolation(r) * r**2
+    # #fxn evaluated at the intervals 
+    
+    # F_r = Cr2(y_space)
+    # I = trapz(F_r, y_space) # integrate F_r along y_space 
+    
+    # planar_rots_wing_g_norm = np.linalg.norm(planar_rots_wing_g, axis=1)
+    # planar_rots_squared = planar_rots_wing_g_norm**2
+    # rho = 1.225
+    # Fl_magnitude = 0.5*rho*cl*planar_rots_squared*I
+    # Fd_magnitude = 0.5*rho*cd*planar_rots_squared*I
 
     #calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
     #each row represents a timestep and the value contained therein the total Fl/Fd for that time
+    #this loop does the following: it loops over y_space (100, 1000, 10000 however many points the user sets) and for every point it computes the value 
+    #for all timesteps for that point and ONLY then it moves on to the next point, computes all timesteps and so on, until it's done looping over y_space
     for i in range(y_space.shape[0]):
+        r = y_space[i]-y_space[0]
+        y_blade_g = r*y_wing_g_sequence #(101,3)
+        blade_planar_us_wing_g = np.cross(planar_rots_wing_g.reshape(101,3), y_blade_g, axis=1)
+        blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
 
-        Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
-        Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
-        Frot_magnitude += rho*crot*us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-
+        # Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
+        # Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
+        # Frot_magnitude += rho*crot*us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
         # Frot_magnitude += rho*crot*us_wing_g_magnitude*alphas_dt_interp(timeline)*(c[i]**2)*dr
         
-        # Frot_magnitude += rho*crot*((planar_rot_wing_g_squared.reshape(nt,))**2)*((y_space[i]-y_space[0])**2)*alphas_dt_sequence*(c[i]**2)*dr
-        # Fl_magnitude += 0.5*rho*cl.reshape(nt,)*((planar_rot_wing_g_squared.reshape(nt,))**2)*((y_space[i]-y_space[0])**2)*c[i]*dr 
-        # Fd_magnitude += 0.5*rho*cd.reshape(nt,)*((planar_rot_wing_g_squared.reshape(nt,))**2)*((y_space[i]-y_space[0])**2)*c[i]*dr 
+        # Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+        Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr 
+        Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr 
         
         # Frot_magnitude += rho*crot*(us_wing_g_magnitude)*rots_wing_g_magnitude.reshape(nt,)*(c_mean**2)*R*(y_space[i]-y_space[0])*(c_hat[i]**2)*dr # based on Sane 2002 page 1091: r_hat = y_space[i]-y_space[0] ; dr_hat = dr 
 
-    #vector calculation of the lift and drag forces. arrays of the form (101, 3) 
-    # Fl_magnitude = cl*planar_rots_wing_g_norm**2
-    # Fd_magnitude = cd*planar_rots_wing_g_norm**2
+    # # # vector calculation of the lift and drag forces. arrays of the form (101, 3) 
+    # Fl_magnitude = cl*np.linalg.norm(planar_rots_wing_g, axis=1)**2
+    # Fd_magnitude = cd*np.linalg.norm(planar_rots_wing_g, axis=1)**2
 
     for i in range(timeline.shape[0]):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
-        Frot[i,:] = (Frot_magnitude[i] * z_wing_gSequence[i])
+        Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
 
     Fx_QSM = Fl[:, 0]+Fd[:, 0]+Frot[:, 0]
     Fy_QSM = Fl[:, 1]+Fd[:, 1]+Frot[:, 1]
@@ -592,15 +614,15 @@ def main():
     print('x0_final: ', x_final, 'K_final: ', K_final)
     F(x_final, True)
 
-# import cProfile
-# import pstats
-# import io
-# profile = cProfile.Profile()
-# profile.enable()
+import cProfile
+import pstats
+import io
+profile = cProfile.Profile()
+profile.enable()
 main()
-# profile.disable()
-# s = io.StringIO()
-# ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
-# ps.print_stats()
-# with open('profile.txt', 'w+') as f:
-#     f.write(s.getvalue())
+profile.disable()
+s = io.StringIO()
+ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
+ps.print_stats()
+with open('profile.txt', 'w+') as f:
+    f.write(s.getvalue())
