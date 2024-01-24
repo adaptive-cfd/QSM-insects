@@ -417,7 +417,7 @@ def load_forces_data(file):
 ############################################################################################################################################################################################
 ##%% main 
 
-from scipy.integrate import trapz
+from scipy.integrate import trapz, simpson
 import scipy.optimize as opt
 import time
 
@@ -453,7 +453,7 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     #fxn evaluated at the intervals 
     
     F_r = Cr2(y_space)
-    I = trapz(F_r, y_space) # integrate F_r along y_space 
+    I = simpson(F_r, y_space) # integrate F_r along y_space 
     # planar_rot_squared = rots_wing_g[:, 0]**2 + rots_wing_g[:, 2]**2 
     planar_rots_squared = planar_rots_wing_g_norm**2
     rho = 1.225
@@ -461,6 +461,9 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     Fd_magnitude = 0.5*rho*cd*planar_rots_squared*I
     # Fl_magnitude = cl*planar_rots_wing_g_norm**2
     # Fd_magnitude = cd*planar_rots_wing_g_norm**2
+    # writeArraytoFile(Fl_magnitude, 'Fl_magnitude_analytical.txt')
+    # writeArraytoFile(Fd_magnitude, 'Fd_magnitude_analytical.txt')
+    # writeArraytoFile(planar_rots_squared*I, 'planar_ana.txt')
 
     Fl = np.zeros((timeline.shape[0], 3))
     Fd = np.zeros((timeline.shape[0], 3))

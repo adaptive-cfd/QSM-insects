@@ -99,9 +99,9 @@ wingtip_index = 17
 min_y = np.min(wingPoints[:, 1])
 max_y = np.max(wingPoints[:, 1])
 diff = max_y-min_y
-wingPoints_normalization = wingPoints/diff
-min_y = np.min(wingPoints_normalization[:, 1])
-max_y = np.max(wingPoints_normalization[:, 1])
+wingPoints_norm = wingPoints/diff
+min_y = np.min(wingPoints_norm[:, 1])
+max_y = np.max(wingPoints_norm[:, 1])
 R = max_y - min_y
 
 u_wind_g = np.array([0, 0, 0])
@@ -177,7 +177,7 @@ Frot_magnitude = np.zeros(timeline.shape[0])
 
 
 def getChordLength(wingPoints, y_coordinate):
-    #get the division in wing segments (front and back)
+    #get the division in wing segments (leading and trailing)
     split_index = 16
     righthand_section = wingPoints[:split_index]
     lefthand_section = wingPoints[split_index:]
@@ -483,7 +483,7 @@ import time
 
 
 def F(x, show_plots=False):
-    global Fl_magnitude, Fd_magnitude, Frot_magnitude
+    global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g
     cl, cd, crot = getAerodynamicCoefficients(x, np.array(AoA))
     if show_plots: 
         # plt.plot(timeline, np.degrees(phis), label='ɸ')
@@ -500,36 +500,22 @@ def F(x, show_plots=False):
 
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
-    c = getChordLength(wingPoints_normalization, y_space) 
+    c = getChordLength(wingPoints_norm, y_space) 
     # c_mean = np.mean(c)
 
     # planar_rot_wing_g_squared = rots_wing_g[:, 0]**2 + rots_wing_g[:, 2]**2 #planar angular velocity 𝛀(φ, Θ)
 
     rho = 1.225
     dr = y_space[1]-y_space[0]
-    # c_hat = c / c_mean
+    # c = c / c_mean
     nt = timeline.shape[0]
     # rots_wing_g_magnitude = np.linalg.norm(rots_wing_g, axis=1)
 
     Fl_magnitude = np.zeros(timeline.shape[0])
     Fd_magnitude = np.zeros(timeline.shape[0])
     Frot_magnitude = np.zeros(timeline.shape[0])
-
-    # c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
-
-    # # define function to integrate 
-    # def Cr2(r): 
-    #     return c_interpolation(r) * r**2
-    # #fxn evaluated at the intervals 
-    
-    # F_r = Cr2(y_space)
-    # I = trapz(F_r, y_space) # integrate F_r along y_space 
-    
-    # planar_rots_wing_g_norm = np.linalg.norm(planar_rots_wing_g, axis=1)
-    # planar_rots_squared = planar_rots_wing_g_norm**2
-    # rho = 1.225
-    # Fl_magnitude = 0.5*rho*cl*planar_rots_squared*I
-    # Fd_magnitude = 0.5*rho*cd*planar_rots_squared*I
+    planar_rots_wing_g = planar_rots_wing_g.reshape(101,3)
+    planar = np.zeros(timeline.shape[0])
 
     #calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
     #each row represents a timestep and the value contained therein the total Fl/Fd for that time
@@ -538,7 +524,7 @@ def F(x, show_plots=False):
     for i in range(y_space.shape[0]):
         r = y_space[i]-y_space[0]
         y_blade_g = r*y_wing_g_sequence #(101,3)
-        blade_planar_us_wing_g = np.cross(planar_rots_wing_g.reshape(101,3), y_blade_g, axis=1)
+        blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
         blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
 
         # Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
@@ -549,13 +535,15 @@ def F(x, show_plots=False):
         # Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
         Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr 
         Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr 
+        # planar += (blade_planar_us_wing_g_magnitude**2)*c[i]*dr 
         
         # Frot_magnitude += rho*crot*(us_wing_g_magnitude)*rots_wing_g_magnitude.reshape(nt,)*(c_mean**2)*R*(y_space[i]-y_space[0])*(c_hat[i]**2)*dr # based on Sane 2002 page 1091: r_hat = y_space[i]-y_space[0] ; dr_hat = dr 
 
+    # writeArraytoFile(Fl_magnitude, 'Fl_magnitude_num.txt')
+    # writeArraytoFile(Fd_magnitude, 'Fd_magnitude_num.txt')
+    # writeArraytoFile(planar , 'planar_num.txt')
+    
     # # # vector calculation of the lift and drag forces. arrays of the form (101, 3) 
-    # Fl_magnitude = cl*np.linalg.norm(planar_rots_wing_g, axis=1)**2
-    # Fd_magnitude = cd*np.linalg.norm(planar_rots_wing_g, axis=1)**2
-
     for i in range(timeline.shape[0]):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
@@ -614,15 +602,15 @@ def main():
     print('x0_final: ', x_final, 'K_final: ', K_final)
     F(x_final, True)
 
-import cProfile
-import pstats
-import io
-profile = cProfile.Profile()
-profile.enable()
+# import cProfile
+# import pstats
+# import io
+# profile = cProfile.Profile()
+# profile.enable()
 main()
-profile.disable()
-s = io.StringIO()
-ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
-ps.print_stats()
-with open('profile.txt', 'w+') as f:
-    f.write(s.getvalue())
+# profile.disable()
+# s = io.StringIO()
+# ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
+# ps.print_stats()
+# with open('profile.txt', 'w+') as f:
+#     f.write(s.getvalue())
