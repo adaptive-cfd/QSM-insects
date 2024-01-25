@@ -193,7 +193,13 @@ def load_kinematics_data(file):
 def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, number_of_timesteps=360, frequency=1, useCFDData=True):
     u_wind_g = np.array([0, 0, 0])
 
-    timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
+    # timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = load_kinematics_data('kinematics_data_for_QSM.csv')
+    kinematics_cfd = it.load_t_file('kinematics_musca_intact.t')
+    timeline = kinematics_cfd[:,0].flatten()
+    alphas = kinematics_cfd[:,8].flatten()
+    phis = kinematics_cfd[:,9].flatten()
+    thetas = kinematics_cfd[:,10].flatten()
+
     # timeline, alphas, phis, thetas, alphas_dt, phis_dt, thetas_dt = it.load_t_file('kinematics.t')
         
     alphas_interp = interp1d(timeline.flatten(), alphas.flatten(), fill_value='extrapolate')
@@ -201,7 +207,6 @@ def generateSequence (wingPoints, wingtip_index, pivot_index, start_time=0, numb
     thetas_interp = interp1d(timeline.flatten(), thetas.flatten(), fill_value='extrapolate')
 
     timeline = np.linspace(0, 1, 101)
-
     strokePointsSequence = np.zeros((timeline.shape[0], wingPoints.shape[0], 3))
     bodyPointsSequence = np.zeros((timeline.shape[0], wingPoints.shape[0], 3))
     globalPointsSequence = np.zeros((timeline.shape[0], wingPoints.shape[0], 3))
@@ -442,9 +447,11 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
     wingPoints = wingPoints/diff
     min_y = np.min(wingPoints[:, 1])
     max_y = np.max(wingPoints[:, 1])
-    y_space = np.linspace(min_y, max_y, 100)
+    y_space = np.linspace(min_y, max_y, 100) 
 
     c = getChordLength(wingPoints, y_space)
+    # c_mean = np.mean(c)
+    # c = c / c_mean
     c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
 
     # define function to integrate 
@@ -452,21 +459,18 @@ def F(x, timeline, globalPointsSequence, bodyPointsSequence, strokePointsSequenc
         return c_interpolation(r) * r**2
     #fxn evaluated at the intervals 
     
-    F_r = Cr2(y_space)
-    I = simpson(F_r, y_space) # integrate F_r along y_space 
-    # planar_rot_squared = rots_wing_g[:, 0]**2 + rots_wing_g[:, 2]**2 
+    I = trapz(Cr2(y_space), y_space) # integrate F_r along y_space 
+
     planar_rots_squared = planar_rots_wing_g_norm**2
     rho = 1.225
     Fl_magnitude = 0.5*rho*cl*planar_rots_squared*I
     Fd_magnitude = 0.5*rho*cd*planar_rots_squared*I
-    # Fl_magnitude = cl*planar_rots_wing_g_norm**2
-    # Fd_magnitude = cd*planar_rots_wing_g_norm**2
-    # writeArraytoFile(Fl_magnitude, 'Fl_magnitude_analytical.txt')
-    # writeArraytoFile(Fd_magnitude, 'Fd_magnitude_analytical.txt')
-    # writeArraytoFile(planar_rots_squared*I, 'planar_ana.txt')
+    # Fl_magnitude = cl*planar_rots_squared
+    # Fd_magnitude = cd*planar_rots_squared
 
     Fl = np.zeros((timeline.shape[0], 3))
     Fd = np.zeros((timeline.shape[0], 3))
+
     for i in range(timeline.shape[0]):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
@@ -511,8 +515,14 @@ def main():
     Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
     Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
     Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
-    t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data('kinematics_data_for_QSM.csv') 
-    # t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = it.load_t_file('kinematics.t')
+
+    # t, alpha_CFD, phi_CFD, theta_CFD, alpha_dot_CFD, phi_dot_CFD, theta_dot_CFD = load_kinematics_data('kinematics_data_for_QSM.csv') 
+    # kinematics_cfd = it.load_t_file('kinematics_musca_intact.t')
+    # t = kinematics_cfd[:,0].flatten()
+    # alphas = kinematics_cfd[:,8].flatten()
+    # phis = kinematics_cfd[:,9].flatten()
+    # thetas = kinematics_cfd[:,10].flatten()
+
     x_0 = [0.225, 1.58,  1.92,  -1.55]
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
     optimize = True
