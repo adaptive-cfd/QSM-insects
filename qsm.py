@@ -508,13 +508,30 @@ def F(x, show_plots=False):
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
     c = getChordLength(e_wingPoints, y_space) 
-    # c_mean = np.mean(c)
-    # c = c / c_mean
-
     rho = 1.225
 
     #thickness of each blade 
     dr = y_space[1]-y_space[0]
+
+    # #START OF ANALYTICAL VERSION
+    # #to do the analytical run comment out lines 536 - 539 and 548 - 559 !!! 
+    # c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
+    # # define function to integrate 
+    # def Cr2(r): 
+    #     return c_interpolation(r) * r**2
+    # def C2r(r):
+    #     return (c_interpolation(r)**2) * r
+    
+    # I = trapz(Cr2(y_space), y_space) # integrate F_r along y_space 
+    # I2 = trapz(C2r(y_space), y_space)
+
+    # planar_rots_squared = (np.linalg.norm(planar_rots_wing_g, axis=1))**2
+    # planar_rots = np.linalg.norm(planar_rots_wing_g, axis=1)
+    # rho = 1.225
+    # Fl_magnitude = 0.5*rho*cl*planar_rots_squared*I
+    # Fd_magnitude = 0.5*rho*cd*planar_rots_squared*I
+    # Frot_magnitude = rho*crot*planar_rots.reshape(101,)*alphas_dt_sequence*I2
+    # #END OF ANALYTICAL VERSION 
 
     Fl_magnitude = np.zeros(nt)
     Fd_magnitude = np.zeros(nt)
@@ -533,17 +550,10 @@ def F(x, show_plots=False):
         y_blade_g = r*y_wing_g_sequence #(101,3)
         blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
         blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
-
-        # Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
-        # Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(us_wing_g_magnitude**2)*c[i]*dr 
-        # Frot_magnitude += rho*crot*us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-        # Frot_magnitude += rho*crot*us_wing_g_magnitude*alphas_dt_interp(timeline)*(c[i]**2)*dr
         
-        # Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+        Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
         Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
         Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
-        
-        # Frot_magnitude += rho*crot*(us_wing_g_magnitude)*rots_wing_g_magnitude.reshape(nt,)*(c_mean**2)*e_R*(y_space[i]-y_space[0])*(c_hat[i]**2)*dr # based on Sane 2002 page 1091: r_hat = y_space[i]-y_space[0] ; dr_hat = dr 
 
     # # # vector calculation of Fl, Fd, Frot. arrays of the form (101, 3) 
     for i in range(nt):
