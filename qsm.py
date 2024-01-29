@@ -511,7 +511,7 @@ def F(x, show_plots=False):
     rho = 1.225
 
     # #START OF ANALYTICAL VERSION
-    # #to do the analytical run comment out lines 536 - 539 and 548 - 559 !!! 
+    # #to do the analytical run comment out lines 545 - 548 and 556 - 567 !!! 
     # #computation following Nakata 2015 eqns. 2.4a-c
     # c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
 
@@ -547,7 +547,7 @@ def F(x, show_plots=False):
     Frot_magnitude = np.zeros(nt)
     planar_rots_wing_g = planar_rots_wing_g.reshape(101,3)
 
-    # the numerical computation follows the same original equation as the analytical one, but instead of performing the integral, we calculate the forces
+    # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
     # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
     # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
     # each row represents a timestep and the value contained therein the total Fl/Fd for that time
