@@ -549,7 +549,7 @@ def F(x, show_plots=False):
 
     # the numerical computation follows the same original equation as the analytical one, but instead of performing the integral, we calculate the forces
     # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
-    # calculation of the magnitude of the lift/drag force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
+    # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
     # each row represents a timestep and the value contained therein the total Fl/Fd for that time
     # this loop does the following: it loops over y_space (100, 1000, 10000 however many points the user sets) and for every point it computes the value 
     # for all timesteps for that point and ONLY then it moves on to the next point, computes all timesteps and so on, until it's done looping over y_space
