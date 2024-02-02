@@ -18,27 +18,6 @@ import insect_tools as it
 from debug import writeArraytoFile
 
 #helper functions
-
-#function to load the required forces data
-def load_forces_data(file):
-    #the items below are lists which must be transformed to np.array upon returning them
-    t = [] 
-    Fx = [] 
-    Fy = [] 
-    Fz = [] 
-
-    with open(file, 'r') as csv_file:
-        reader = csv.reader(csv_file, delimiter=';') 
-        c = 0 
-        for line in reader:
-            if c>= 2:     
-                timeStep, fx, fy, fz = line
-                t.append(float(timeStep))
-                Fx.append(float(fx)) 
-                Fy.append(float(fy))
-                Fz.append(float(fz))
-            c += 1
-    return np.array(t), np.array(Fx), np.array(Fy), np.array(Fz) 
  
 def parse_wing_file(wing_file, scale) -> np.ndarray:
     #open the file in read mode     
@@ -68,6 +47,7 @@ def parse_wing_file(wing_file, scale) -> np.ndarray:
 wing_file = 'drosophilaMelanogasterWing.csv'
 wingPoints, hinge_index, wingtip_index = parse_wing_file(wing_file, 0.001)
 
+
 # #print wing to check positioning and indexing
 # plt.scatter(wingPoints[:, 0], wingPoints[:, 1])
 # i = 0
@@ -88,8 +68,6 @@ e_wingPoints = wingPoints/R_nonnormalized
 min_y = np.min(e_wingPoints[:, 1])
 max_y = np.max(e_wingPoints[:, 1])
 e_R = max_y - min_y #e_R = 1
-
-
 
 #load kinematics data by means of load_t_file function from insect_tools library 
 kinematics_cfd = it.load_t_file('kinematics_musca_intact.t')
@@ -138,13 +116,11 @@ z_wing_g_sequence = np.zeros((nt, 3))
 
 delta_t = timeline[1] - timeline[0]
 
-t, Fx_CFD, Fy_CFD, Fz_CFD = load_forces_data('forces_data_for_QSM.csv')
-
-# forces_CFD = it.load_t_file('forces.t')
-# t = forces_CFD[:, 0]
-# Fx_CFD = forces_CFD[:, 1]
-# Fy_CFD = forces_CFD[:, 2]
-# Fz_CFD = forces_CFD[:, 3]
+forces_CFD = it.load_t_file('forces.t', T0=[1,2])
+t = forces_CFD[:, 0]-1
+Fx_CFD = forces_CFD[:, 1]
+Fy_CFD = forces_CFD[:, 2]
+Fz_CFD = forces_CFD[:, 3]
 
 Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
 Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
@@ -487,7 +463,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def F(x, show_plots=False):
+def cost(x, numerical=False, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g
 
@@ -504,81 +480,86 @@ def F(x, show_plots=False):
         plt.xlabel('t/T')
         plt.legend()
         plt.show()
-    
+
     # chord calculation 
-    y_space = np.linspace(min_y, max_y, 100)
+    y_space = np.linspace(min_y, max_y, 250)
     c = getChordLength(e_wingPoints, y_space) 
     rho = 1.225
+    cl = cl.reshape(nt,)
+    cd = cd.reshape(nt,)
 
-    # #START OF ANALYTICAL VERSION
-    # #to do the analytical run comment out lines 545 - 548 and 556 - 567 !!! 
-    # #computation following Nakata 2015 eqns. 2.4a-c
-    # c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
+    if numerical == True:
+        #START OF NUMERICAL VERSION
+        #computation following Nakata 2015 eqns. 2.4a-c
+        #thickness of each blade 
+        dr = y_space[1]-y_space[0]
 
-    # #the following comes from defining lift/drag in the following way: dFl = 0.5*rho*cl*v^2*c*dr -> where v = linear velocity, c = chord length, dr = chord width
-    # #v can be broken into 𝛀(φ,Θ)*r  (cf. lines 245-248). plugging that into our equation we get: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr (lift in each blade)
-    # #integrating both sides, and pulling constants out of integrand on RHS: Fl = 0.5*rho*cl*𝛀^2(φ,Θ)*∫c*r^2*dr 
-    # #our function def Cr2 then calculates the product of c and r^2 ; I (second moment of area) performs the integration of the product 
-    # #drag is pretty much the same except that instead of cl we use cd: Fd = 0.5*rho*cd*𝛀^2(φ,Θ)*∫c*r^2*dr
-    # #and the rotational force is defined as follows: Frot = 0.5*rho*crot*𝛀(φ,Θ)*∫c^2*r*dr
+        Fl_magnitude = np.zeros(nt)
+        Fd_magnitude = np.zeros(nt)
+        Frot_magnitude = np.zeros(nt)
 
-    # def Cr2(r): 
-    #     return c_interpolation(r) * r**2
-    # def C2r(r):
-    #     return (c_interpolation(r)**2) * r
-    
-    # Ild = simpson(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
-    # Irot = simpson(C2r(y_space), y_space) #second moment of area for rotational force calculation 
+        planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
 
-    # planar_rots_wing_g_norm = np.linalg.norm(planar_rots_wing_g, axis=1)
-    # rho = 1.225
-    # Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_norm**2)*Ild
-    # Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_norm**2)*Ild
-    # Frot_magnitude = rho*crot*planar_rots_wing_g_norm.reshape(101,)*alphas_dt_sequence*Irot
-    # #END OF ANALYTICAL VERSION 
+        # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
+        # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
+        # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (nt,) array is returned.
+        # each row represents a timestep and the value contained therein the total Fl/Fd/Frot for that timestep
+        # this loop does the following: it loops over y_space (100, 1000, 10000 however many points the user sets) and for every point it computes the value 
+        # for all timesteps for that point and ONLY then it moves on to the next point, computes all timesteps and so on, until it's done looping over y_space
+        for i in range(y_space.shape[0]):
+            #as previously discussed (cf. 245 - 248), for the numerical calculations of Fd, Fl, Frot we must use the absolute angular velocity that solely depends on phi and theta {𝛀(φ,Θ)} -> absolute planar angular velocity
+            #now, since we are looping over the span (y_space) here, we have to calculate the absolute planar linear velocity for each blade by computing the cross product 
+            #of the absolute planar angular velocity and the absolute radius of each blade (y_blade_g). 
+            r = y_space[i]-y_space[0]
+            y_blade_g = r*y_wing_g_sequence #(nt,3)
+            blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
+            blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
+            
+            Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
+            Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
+            Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+        #END OF NUMERICAL VERSION 
 
-    #START OF NUMERICAL VERSION
-    #computation following Nakata 2015 eqns. 2.4a-c
-    #thickness of each blade 
-    dr = y_space[1]-y_space[0]
+    else: 
+        #START OF ANALYTICAL VERSION
+        #computation following Nakata 2015 eqns. 2.4a-c
+        c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
 
-    Fl_magnitude = np.zeros(nt)
-    Fd_magnitude = np.zeros(nt)
-    Frot_magnitude = np.zeros(nt)
-    planar_rots_wing_g = planar_rots_wing_g.reshape(101,3)
+        #the following comes from defining lift/drag in the following way: dFl = 0.5*rho*cl*v^2*c*dr -> where v = linear velocity, c = chord length, dr = chord width
+        #v can be broken into 𝛀(φ,Θ)*r  (cf. lines 245-248). plugging that into our equation we get: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr (lift in each blade)
+        #integrating both sides, and pulling constants out of integrand on RHS: Fl = 0.5*rho*cl*𝛀^2(φ,Θ)*∫c*r^2*dr 
+        #our function def Cr2 then calculates the product of c and r^2 ; I (second moment of area) performs the integration of the product 
+        #drag is pretty much the same except that instead of cl we use cd: Fd = 0.5*rho*cd*𝛀^2(φ,Θ)*∫c*r^2*dr
+        #and the rotational force is defined as follows: Frot = 0.5*rho*crot*𝛀(φ,Θ)*∫c^2*r*dr
 
-    # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
-    # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
-    # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (101,) array is returned.
-    # each row represents a timestep and the value contained therein the total Fl/Fd for that time
-    # this loop does the following: it loops over y_space (100, 1000, 10000 however many points the user sets) and for every point it computes the value 
-    # for all timesteps for that point and ONLY then it moves on to the next point, computes all timesteps and so on, until it's done looping over y_space
-    for i in range(y_space.shape[0]):
-        #as previously discussed (cf. 245 - 248), for the numerical calculations of Fd, Fl, Frot we must use the absolute angular velocity that solely depends on phi and theta {𝛀(φ,Θ)} -> absolute planar angular velocity
-        #now, since we are looping over the span (y_space) here, we have to calculate the absolute planar linear velocity for each blade by computing the cross product 
-        #of the absolute planar angular velocity and the absolute radius of each blade (y_blade_g). 
-        r = y_space[i]-y_space[0]
-        y_blade_g = r*y_wing_g_sequence #(101,3)
-        blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
-        blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
+        def Cr2(r): 
+            return c_interpolation(r) * r**2
+        def C2r(r):
+            return (c_interpolation(r)**2) * r
         
-        Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-        Fl_magnitude += 0.5*rho*cl.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
-        Fd_magnitude += 0.5*rho*cd.reshape(nt,)*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
-    #END OF NUMERICAL VERSION 
+        Ild = trapz(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
+        Irot = trapz(C2r(y_space), y_space) #second moment of area for rotational force calculation 
 
-    # # # vector calculation of Fl, Fd, Frot. arrays of the form (101, 3) 
+        planar_rots_wing_g_norm = np.linalg.norm(planar_rots_wing_g, axis=1)
+        planar_rots_wing_g_norm = planar_rots_wing_g_norm.reshape(nt,)
+        rho = 1.225
+        Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_norm**2)*Ild
+        Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_norm**2)*Ild
+        Frot_magnitude = rho*crot*planar_rots_wing_g_norm*alphas_dt_sequence*Irot #why reshape?? comment this! 
+        #END OF ANALYTICAL VERSION 
+
+    # vector calculation of Fl, Fd, Frot. arrays of the form (nt, 3) 
     for i in range(nt):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
         Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
-
+   
     Fx_QSM = Fl[:, 0]+Fd[:, 0]+Frot[:, 0]
     Fy_QSM = Fl[:, 1]+Fd[:, 1]+Frot[:, 1]
     Fz_QSM = Fl[:, 2]+Fd[:, 2]+Frot[:, 2]
 
-    K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline))
-    K_den = np.linalg.norm(Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_CFD_interp(timeline))
+    K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline)) + np.linalg.norm(Fy_QSM+Fy_CFD_interp(timeline))
+    K_den = np.linalg.norm(Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_CFD_interp(timeline)) + np.linalg.norm(-Fy_CFD_interp(timeline))
     if K_den != 0: 
         K = K_num/K_den
     else:
@@ -595,7 +576,7 @@ def F(x, show_plots=False):
         plt.show()
 
         plt.plot(timeline[:], Fx_QSM, label='Fx_QSM', color='red')
-        plt.plot(timeline[:], -Fy_QSM, label='Fy_QSM', color='green')
+        plt.plot(timeline[:], -Fy_QSM, label='Fy_QSM', color='green') #-Fy because the data being used corresponds ot a right 
         plt.plot(timeline[:], Fz_QSM, label='Fz_QSM', color='blue')
         plt.plot(timeline[:], Fx_CFD_interp(timeline), label='Fx_CFD', linestyle = 'dashed', color='red')
         plt.plot(timeline[:], Fy_CFD_interp(timeline), label='Fy_CFD', linestyle = 'dashed', color='green')
@@ -605,12 +586,12 @@ def F(x, show_plots=False):
         plt.title(f'Fx_QSM/Fx_CFD = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_interp(timeline)), 3)}; Fz_QSM/Fz_CFD = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_interp(timeline)), 3)}')
         plt.legend()
         plt.show()
-
         generatePlotsForKinematicsSequence()
     return K 
 
 #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
 #for what x_0 values/input this minimum is attained  
+
 def main():
     kinematics()
     x_0 = [1.39072943, -0.46943661,  1.38872827, -0.94982812]
@@ -618,16 +599,16 @@ def main():
     optimize = True
     if optimize:
         start = time.time()
-        optimization = opt.differential_evolution(F, bounds=bounds, x0=x_0, maxiter=20)
+        optimization = opt.differential_evolution(cost, bounds=bounds, x0=x_0, maxiter=20)
         x0_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
     else:
-        x0_final = [0.03433548, -0.01193863,  0.0338657,  -0.023361]
-        K_final = 0.09349021020747196
+        x0_final = [1.76254482, -1.06909505,  1.12313521, -0.72540114]
+        K_final = 0.5108267902800643
 
-    print('x0_final: ', x0_final, 'K_final: ', K_final)
-    F(x0_final, True)
+    print('x0_final: ', x0_final, '\nK_final: ', K_final)
+    cost(x0_final, show_plots=False)
 
 # import cProfile
 # import pstats
