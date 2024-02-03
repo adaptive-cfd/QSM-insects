@@ -19,7 +19,6 @@ from python_tools_master import wabbit_tools as wt
 from debug import writeArraytoFile
 
 #global variables:
-
 isLeft = wt.get_ini_parameter('cfd_run/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
 wingShape = wt.get_ini_parameter('cfd_run/PARAMS.ini', 'Insects', 'WingShape', dtype=str)
 if 'from_file' in wingShape:
@@ -105,13 +104,16 @@ Fx_CFD = forces_CFD[:, 1]
 Fy_CFD = forces_CFD[:, 2]
 Fz_CFD = forces_CFD[:, 3]
 
-if np.round(forces_CFD[-1, 0],3) != time_max: 
-    raise ValueError('CFD cycles does not match that of kinematics data')
-
-print('The number of cycles is: ', time_max) #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
-
 if isLeft == False: 
     Fy_CFD = -Fy_CFD
+    print('The data correspond to the right wing. They will be adjusted to follow the left wing convention in this code.')
+else: 
+    print('The data correspond to the left wing')
+
+if np.round(forces_CFD[-1, 0],3) != time_max: 
+    raise ValueError('CFD cycle number does not match that of kinematics data')
+
+print('The number of cycles is: ', time_max) #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
 
 Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
 Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
@@ -453,7 +455,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def cost(x, numerical=False, show_plots=False):
+def cost(x, numerical=True, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
@@ -472,7 +474,7 @@ def cost(x, numerical=False, show_plots=False):
         plt.show()
 
     # chord calculation 
-    y_space = np.linspace(min_y, max_y, 5000)
+    y_space = np.linspace(min_y, max_y, 50000)
     c = getChordLength(e_wingPoints, y_space)
     rho = 1.225
     cl = cl.reshape(nt,)
@@ -582,7 +584,7 @@ def cost(x, numerical=False, show_plots=False):
 
 def main():
     kinematics()
-    x_0 = [1.39072943, -0.46943661,  1.38872827, -0.94982812]
+    x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
     optimize = True
     if optimize:
@@ -596,7 +598,7 @@ def main():
         K_final = 0.5108267902800643
 
     print('x0_final: ', x0_final, '\nK_final: ', K_final)
-    cost(x0_final, show_plots=True)
+    cost(x0_final, show_plots=False)
 
 # import cProfile
 # import pstats
