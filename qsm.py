@@ -38,10 +38,10 @@ wingtip_index = np.argmax(wingPoints[:, 1])
 # #print wing to check positioning and indexing
 # plt.figure()
 # plt.scatter(wingPoints[:, 0], wingPoints[:, 1])
-# # i = 0
-# # for wingPoint in wingPoints:
-# #     plt.text(wingPoint[0], wingPoint[1], str(i))
-# #     i += 1
+# i = 0
+# for wingPoint in wingPoints:
+#     plt.text(wingPoint[0], wingPoint[1], str(i))
+#     i += 1
 # plt.xlim([-4,4])
 # plt.ylim([-4,4])
 # plt.show()
@@ -480,8 +480,16 @@ def cost(x, numerical=False, show_plots=False):
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
     c = getChordLength(e_wingPoints, y_space)
+
+    # plt.plot(c,y_space)
+    # plt.show()
+    # exit()
+
     rho = 1.225
-    cl = cl.reshape(nt,)
+
+    #both cl and cd are of shape (nt, 1), this however poses a dimensional issue when the magnitude of the lift/drag force is to be multiplied
+    #with their corresponding vectors. to fix this, we reshape cl and cd to be of shape (nt,)
+    cl = cl.reshape(nt,) 
     cd = cd.reshape(nt,)
 
     if numerical:
@@ -535,11 +543,11 @@ def cost(x, numerical=False, show_plots=False):
         Irot = trapz(C2r(y_space), y_space) #second moment of area for rotational force calculation 
 
         planar_rots_wing_g_magnitude = np.linalg.norm(planar_rots_wing_g, axis=1)
-        planar_rots_wing_g_magnitude = planar_rots_wing_g_magnitude.reshape(nt,)
+        planar_rots_wing_g_magnitude = planar_rots_wing_g_magnitude.reshape(nt,) #here we reshape to fix dimensionality issues as planar_rots_wing_g_magnitude is of shape (nt, 1) and it should be of shape (nt,)
         rho = 1.225
         Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_magnitude**2)*Ild
         Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_magnitude**2)*Ild
-        Frot_magnitude = rho*crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot #why reshape?? comment this! 
+        Frot_magnitude = rho*crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot
         #END OF ANALYTICAL VERSION 
 
     # vector calculation of Fl, Fd, Frot. arrays of the form (nt, 3) 
