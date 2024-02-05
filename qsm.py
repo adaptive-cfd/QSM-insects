@@ -63,8 +63,12 @@ phis = np.radians(phis)
 alphas = np.radians(alphas)
 thetas = np.radians(thetas)
 
-#timeline downsizing 
-timeline = np.linspace(0, 1, 101)
+
+#timeline reassignment. when the timeline from the function eval_angles_kinematics_file is used 
+#the last point of the timeline is the same as the first one (so timeline[0] = timeline[-1])
+#to solve this we can either do a variable reassigment or remove the last entry in timeline. the second method
+#leaves you with one less point in the array. the first method is preferred. 
+timeline = np.linspace(0, 1, timeline.shape[0])
 nt = timeline.shape[0] #number of timesteps
 
 #here all of the required variable arrays are created to match the size of the timeline 
@@ -111,9 +115,9 @@ else:
     print('The data correspond to the left wing')
 
 if np.round(forces_CFD[-1, 0],3) != time_max: 
-    raise ValueError('CFD cycle number does not match that of kinematics data')
+    raise ValueError('CFD cycle number does not match that the actual run. Check your PARAMS and forces files\n')
 
-print('The number of cycles is: ', time_max) #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
+print('The number of cycles is ', time_max, '. The forces data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
 
 Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
 Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
@@ -270,7 +274,7 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         # thetas_dt = thetas_dt_interp(t)
 
         #here the time derivatives of the angles are calculated by means of 1st order approximations
-        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep]) / delta_t
+        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep]) / delta_t #here we compute the modulus of (timestep+1) and nt to prevent overflowing.  
         phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / delta_t
         thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / delta_t
 
@@ -418,7 +422,7 @@ def animationPlot(ax, timeStep):
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
-    ax.set_title(f'Timestep: {timeStep} \n⍺: {np.round(np.degrees(alphas[timeStep]), 2)} \nAoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd: {np.round(Fd[timeStep], 4)}')
+    ax.set_title(f'Timestep: {timeStep}, ⍺: {np.round(np.degrees(alphas[timeStep]), 2)}, AoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd: {np.round(Fd[timeStep], 4)} \nFrot: {np.round(Frot[timeStep], 4)}')
 
 # run the live animation of the wing 
 def generatePlotsForKinematicsSequence():
@@ -455,7 +459,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def cost(x, numerical=True, show_plots=False):
+def cost(x, numerical=False, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
@@ -474,7 +478,7 @@ def cost(x, numerical=True, show_plots=False):
         plt.show()
 
     # chord calculation 
-    y_space = np.linspace(min_y, max_y, 50000)
+    y_space = np.linspace(min_y, max_y, 100)
     c = getChordLength(e_wingPoints, y_space)
     rho = 1.225
     cl = cl.reshape(nt,)
@@ -598,7 +602,7 @@ def main():
         K_final = 0.5108267902800643
 
     print('x0_final: ', x0_final, '\nK_final: ', K_final)
-    cost(x0_final, show_plots=False)
+    cost(x0_final, show_plots=True)
 
 # import cProfile
 # import pstats
