@@ -51,8 +51,8 @@ wingtip_index = np.argmax(wingPoints[:, 1])
 # spanwise normalization   
 min_y = np.min(wingPoints[:, 1])
 max_y = np.max(wingPoints[:, 1])
-R_nonnormalized = max_y-min_y #unnormalized wing radius
-e_wingPoints = wingPoints/R_nonnormalized 
+R = max_y-min_y #nonnormalized wing radius
+e_wingPoints = wingPoints/R #normalization of the wing points
 min_y = np.min(e_wingPoints[:, 1])
 max_y = np.max(e_wingPoints[:, 1])
 e_R = max_y - min_y #e_R = 1
