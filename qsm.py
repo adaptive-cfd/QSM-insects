@@ -467,7 +467,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def cost(x, numerical=True, show_plots=False):
+def cost(x, numerical=False, nb=100, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
@@ -621,23 +621,30 @@ def main():
     print('x0_final: ', x0_final, '\nK_final: ', K_final)
     cost(x0_final, show_plots=False)
 
-# def main():
-#     kinematics()
-#     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
-#     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-#     optimize = True
-#     if optimize:
-#         start = time.time()
-#         optimization = opt.differential_evolution(cost, bounds=bounds, x0=x_0, maxiter=100)
-#         x0_final = optimization.x
-#         K_final = optimization.fun
-#         print('completed in:', round(time.time() - start, 3), ' seconds')
-#     else:
-#         x0_final = [1.76254482, -1.06909505,  1.12313521, -0.72540114]
-#         K_final = 0.5108267902800643
-
-#     print('x0_final: ', x0_final, '\nK_final: ', K_final)
-#     cost(x0_final, show_plots=False)
+def main():
+    kinematics()
+    x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+    bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+    optimize = True
+    nb = 100 #nb: number of blades 
+    numerical = False 
+    if optimize:
+        start = time.time()
+        optimization = opt.minimize(cost, args=(numerical, nb), bounds=bounds, x0=x_0)
+        x0_final = optimization.x
+        K_final = optimization.fun
+        if numerical:
+            print('Computing using the numerical approach')
+        else: 
+            print('Computing using the analytical approach')
+        print('Computing for: ' + str(nb) + ' blades')
+        print('Completed in:', round(time.time() - start, 3), 'seconds')
+    else:
+        x0_final = [0.225, 1.58,  1.92, -1.55]
+        K_final = ''
+        # cost(x0_final, numerical=False, nb=500000, show_plots=False)
+    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+    cost(x0_final, show_plots=False)
 
 # import cProfile
 # import pstats
