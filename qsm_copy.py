@@ -613,18 +613,25 @@ def main():
     kinematics()
     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-    optimize = False
+    optimize = True
+    nb = 100 #nb: number of blades 
+    numerical = False 
     if optimize:
         start = time.time()
-        optimization = opt.minimize(cost, args=(True, 1000), bounds=bounds, x0=x_0)
+        optimization = opt.minimize(cost, args=(numerical, nb), bounds=bounds, x0=x_0)
         x0_final = optimization.x
         K_final = optimization.fun
-        print('completed in:', round(time.time() - start, 3), ' seconds')
+        if numerical:
+            print('Computing using the numerical approach')
+        else: 
+            print('Computing using the analytical approach')
+        print('Computing for: ' + str(nb) + ' blades')
+        print('Completed in:', round(time.time() - start, 3), 'seconds')
     else:
         x0_final = [0.225, 1.58,  1.92, -1.55]
         K_final = ''
         # cost(x0_final, numerical=False, nb=500000, show_plots=False)
-    print('x0_final: ', np.round(x0_final, 5), '\nK_final: ', K_final)
+    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
     cost(x0_final, show_plots=False)
 
 # def main2(nb): 
