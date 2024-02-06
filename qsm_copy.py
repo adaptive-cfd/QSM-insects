@@ -16,7 +16,15 @@ import functools
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from python_tools_master import insect_tools as it 
 from python_tools_master import wabbit_tools as wt
-from debug import writeArraytoFile
+# from debug import writeArraytoFile
+
+def writeArraytoFile(arr, file): 
+    with open(file, 'w') as fileWriter: 
+        for val in arr:
+            if isinstance(val, np.ndarray):
+                fileWriter.writelines(str(val.flatten())+'\n')
+            else: 
+                fileWriter.writelines(str(val)+'\n')
 
 #global variables:
 isLeft = wt.get_ini_parameter('cfd_run/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
@@ -120,7 +128,7 @@ else:
 if np.round(forces_CFD[-1, 0],3) != time_max: 
     raise ValueError('CFD cycle number does not match that the actual run. Check your PARAMS and forces files\n')
 
-print('The number of cycles is ', time_max, '. The forces data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
+print('The number of cycles is', time_max, '. The forces data were however only sampled for', np.round(t[-1]), 'cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
 
 Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
 Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
@@ -467,7 +475,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def cost(x, numerical=True, show_plots=False):
+def cost(x, numerical=False, nb=100, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
@@ -486,7 +494,7 @@ def cost(x, numerical=True, show_plots=False):
         plt.show()
 
     # chord calculation 
-    y_space = np.linspace(min_y, max_y, 50000)
+    y_space = np.linspace(min_y, max_y, nb)
     c = getChordLength(e_wingPoints, y_space)
 
     # plt.plot(c,y_space)
@@ -500,10 +508,7 @@ def cost(x, numerical=True, show_plots=False):
     cl = cl.reshape(nt,) 
     cd = cd.reshape(nt,)
 
-    # print(planar_rots_wing_g)
-    writeArraytoFile(planar_rots_wing_s, 'planar_rots_wing_s.txt')
-    exit()
-
+    _planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
     if numerical:
         #START OF NUMERICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -514,7 +519,6 @@ def cost(x, numerical=True, show_plots=False):
         Fd_magnitude = np.zeros(nt)
         Frot_magnitude = np.zeros(nt)
 
-        planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
         # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
         # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
         # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (nt,) array is returned.
@@ -526,14 +530,16 @@ def cost(x, numerical=True, show_plots=False):
             #now, since we are looping over the span (y_space) here, we have to calculate the absolute planar linear velocity for each blade by computing the cross product 
             #of the absolute planar angular velocity and the absolute radius of each blade (y_blade_g). 
             r = y_space[i] - y_space[0]
-            # y_blade_g = r*y_wing_g_sequence #(nt,3)
-            blade_planar_us_wing_g = r*planar_rots_wing_g
-            # blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
+            y_blade_g = r*y_wing_g_sequence #(nt,3)
+            blade_planar_us_wing_g = np.cross(_planar_rots_wing_g, y_blade_g, axis=1)
             blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
             
             Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+        writeArraytoFile(Fl_magnitude, str(nb) + 'Fl_magnitude_n.txt')
+        writeArraytoFile(Fd_magnitude, str(nb) + 'Fd_magnitude_n.txt')
+        writeArraytoFile(Frot_magnitude, str(nb) + 'Frot_magnitude_n.txt')
         #END OF NUMERICAL VERSION 
 
     else: 
@@ -555,14 +561,16 @@ def cost(x, numerical=True, show_plots=False):
         Ild = simpson(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
         Irot = simpson(C2r(y_space), y_space) #second moment of area for rotational force calculation 
 
-        planar_rots_wing_g_magnitude = np.linalg.norm(planar_rots_wing_g, axis=1)
+        planar_rots_wing_g_magnitude = np.linalg.norm(_planar_rots_wing_g, axis=1)
         planar_rots_wing_g_magnitude = planar_rots_wing_g_magnitude.reshape(nt,) #here we reshape to fix dimensionality issues as planar_rots_wing_g_magnitude is of shape (nt, 1) and it should be of shape (nt,)
         rho = 1.225
         Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_magnitude**2)*Ild
         Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_magnitude**2)*Ild
         Frot_magnitude = rho*crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot
+        writeArraytoFile(Fl_magnitude, str(nb) + 'Fl_magnitude_a.txt')
+        writeArraytoFile(Fd_magnitude, str(nb) + 'Fd_magnitude_a.txt')
+        writeArraytoFile(Frot_magnitude, str(nb) + 'Frot_magnitude_a.txt')
         #END OF ANALYTICAL VERSION 
-
     # vector calculation of Fl, Fd, Frot. arrays of the form (nt, 3) 
     for i in range(nt):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
@@ -611,20 +619,40 @@ def main():
     kinematics()
     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-    optimize = True
+    optimize = False
     if optimize:
         start = time.time()
-        optimization = opt.differential_evolution(cost, bounds=bounds, x0=x_0, maxiter=20)
+        optimization = opt.minimize(cost, bounds=bounds, x0=x_0)#, maxiter=1000)
         x0_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
     else:
-        x0_final = [1.76254482, -1.06909505,  1.12313521, -0.72540114]
+        x0_final = [0.225, 1.58,  1.92, -1.55]
         K_final = 0.5108267902800643
+        cost(x0_final, numerical=False, nb=2, show_plots=False)
+    print('x0_final: ', np.round(x0_final, 3), '\nK_final: ', K_final)
+    # cost(x0_final, show_plots=False)
 
-    print('x0_final: ', x0_final, '\nK_final: ', K_final)
-    cost(x0_final, show_plots=False)
-
+def main2(nb): 
+    kinematics()
+    result = []
+    for i in range(2):
+        x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+        bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+        optimize = False
+        if optimize:
+            start = time.time()
+            optimization = opt.minimize(cost,args=(i==1, nb), bounds=bounds, x0=x_0)#, maxiter=1000)
+            x0_final = optimization.x
+            K_final = optimization.fun
+            print('completed in:', round(time.time() - start, 3), ' seconds')
+        else:
+            x0_final = [0.225, 1.58,  1.92, -1.55]
+            K_final = 0.5108267902800643
+            cost(x_0)
+        print('x0_final: ', x0_final, '\nK_final: ', K_final)
+        result.append([np.round(K_final, 2), np.round(x0_final, 2)])
+    return result
 # import cProfile
 # import pstats
 # import io
