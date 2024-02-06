@@ -16,7 +16,7 @@ import functools
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from python_tools_master import insect_tools as it 
 from python_tools_master import wabbit_tools as wt
-from debug import writeArraytoFile
+#from debug import writeArraytoFile
 
 #global variables:
 isLeft = wt.get_ini_parameter('cfd_run/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
@@ -486,7 +486,7 @@ def cost(x, numerical=True, show_plots=False):
         plt.show()
 
     # chord calculation 
-    y_space = np.linspace(min_y, max_y, 50000)
+    y_space = np.linspace(min_y, max_y, 100)
     c = getChordLength(e_wingPoints, y_space)
 
     # plt.plot(c,y_space)
@@ -499,10 +499,6 @@ def cost(x, numerical=True, show_plots=False):
     #with their corresponding vectors. to fix this, we reshape cl and cd to be of shape (nt,)
     cl = cl.reshape(nt,) 
     cd = cd.reshape(nt,)
-
-    # print(planar_rots_wing_g)
-    writeArraytoFile(planar_rots_wing_s, 'planar_rots_wing_s.txt')
-    exit()
 
     if numerical:
         #START OF NUMERICAL VERSION
@@ -614,7 +610,7 @@ def main():
     optimize = True
     if optimize:
         start = time.time()
-        optimization = opt.differential_evolution(cost, bounds=bounds, x0=x_0, maxiter=20)
+        optimization = opt.minimize(cost, bounds=bounds, x0=x_0)
         x0_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
@@ -624,6 +620,24 @@ def main():
 
     print('x0_final: ', x0_final, '\nK_final: ', K_final)
     cost(x0_final, show_plots=False)
+
+# def main():
+#     kinematics()
+#     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+#     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+#     optimize = True
+#     if optimize:
+#         start = time.time()
+#         optimization = opt.differential_evolution(cost, bounds=bounds, x0=x_0, maxiter=100)
+#         x0_final = optimization.x
+#         K_final = optimization.fun
+#         print('completed in:', round(time.time() - start, 3), ' seconds')
+#     else:
+#         x0_final = [1.76254482, -1.06909505,  1.12313521, -0.72540114]
+#         K_final = 0.5108267902800643
+
+#     print('x0_final: ', x0_final, '\nK_final: ', K_final)
+#     cost(x0_final, show_plots=False)
 
 # import cProfile
 # import pstats

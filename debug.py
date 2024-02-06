@@ -1,4 +1,5 @@
 import numpy as np 
+
 def writeArraytoFile(arr, file): 
     with open(file, 'w') as fileWriter: 
         for val in arr:
@@ -10,11 +11,11 @@ def writeArraytoFile(arr, file):
 def convergenceTest():
     from qsm_copy import main2
     nBlades =  (2, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000)
-    K_final = open('convergence?/K_final.csv', 'w')
-    x0_0 = open('convergence?/x0_0.csv', 'w')
-    x0_1 = open('convergence?/x0_1.csv', 'w')
-    x0_2 = open('convergence?/x0_2.csv', 'w')
-    x0_3 = open('convergence?/x0_3.csv', 'w')
+    K_final = open('convergence/K_final.csv', 'w')
+    x0_0 = open('convergence/x0_0.csv', 'w')
+    x0_1 = open('convergence/x0_1.csv', 'w')
+    x0_2 = open('convergence/x0_2.csv', 'w')
+    x0_3 = open('convergence/x0_3.csv', 'w')
     for blade in nBlades:
         print('computing for:', blade, 'blades') 
         result = main2(blade)
@@ -28,7 +29,7 @@ def convergenceTest():
     x0_1.close()
     x0_2.close()
     x0_3.close()
-convergenceTest()
+# convergenceTest()
 
 def standardDeviation(file_a, file_n): 
     with open(file_a, 'r') as file1: 
@@ -43,9 +44,11 @@ def standardDeviation(file_a, file_n):
         N += 1
     return np.sqrt(error_sqrd / N)
 
-# Fl_deviation = standardDeviation('debug/100000Fl_magnitude_a.txt', 'debug/100000Fl_magnitude_n.txt')
-# print(Fl_deviation)
-# Fd_deviation = standardDeviation('debug/100000Fd_magnitude_a.txt', 'debug/100000Fd_magnitude_n.txt')
-# print(Fd_deviation)
-# Frot_deviation = standardDeviation('debug/100000Frot_magnitude_a.txt', 'debug/100000Frot_magnitude_n.txt')
-# print(Frot_deviation)
+nb = 500000
+print('computing standard devition for', nb, 'blades')
+Fl_deviation = standardDeviation('debug/' + str(nb) + '_Fl_magnitude_a.txt', 'debug/' + str(nb) + '_Fl_magnitude_n.txt')
+print(np.round(Fl_deviation, 4))
+Fd_deviation = standardDeviation('debug/' + str(nb) + '_Fd_magnitude_a.txt', 'debug/' + str(nb) + '_Fd_magnitude_n.txt')
+print(np.round(Fd_deviation, 4))
+Frot_deviation = standardDeviation('debug/' + str(nb) + '_Frot_magnitude_a.txt', 'debug/' + str(nb) + '_Frot_magnitude_n.txt')
+print(np.round(Frot_deviation, 4))

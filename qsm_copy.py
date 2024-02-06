@@ -478,9 +478,7 @@ import time
 def cost(x, numerical=False, nb=100, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
-
     cl, cd, crot = getAerodynamicCoefficients(x, np.array(AoA))
-
     if show_plots: 
         # plt.plot(timeline, np.degrees(phis), label='ɸ')
         # plt.plot(timeline, np.degrees(alphas), label ='⍺')
@@ -496,10 +494,6 @@ def cost(x, numerical=False, nb=100, show_plots=False):
     # chord calculation 
     y_space = np.linspace(min_y, max_y, nb)
     c = getChordLength(e_wingPoints, y_space)
-
-    # plt.plot(c,y_space)
-    # plt.show()
-    # exit()
 
     rho = 1.225
 
@@ -537,9 +531,9 @@ def cost(x, numerical=False, nb=100, show_plots=False):
             Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-        writeArraytoFile(Fl_magnitude, str(nb) + 'Fl_magnitude_n.txt')
-        writeArraytoFile(Fd_magnitude, str(nb) + 'Fd_magnitude_n.txt')
-        writeArraytoFile(Frot_magnitude, str(nb) + 'Frot_magnitude_n.txt')
+        # writeArraytoFile(Fl_magnitude, 'debug/' + str(nb) + '_Fl_magnitude_n.txt')
+        # writeArraytoFile(Fd_magnitude, 'debug/' + str(nb) + '_Fd_magnitude_n.txt')
+        # writeArraytoFile(Frot_magnitude, 'debug/' + str(nb) + '_Frot_magnitude_n.txt')
         #END OF NUMERICAL VERSION 
 
     else: 
@@ -567,9 +561,9 @@ def cost(x, numerical=False, nb=100, show_plots=False):
         Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_magnitude**2)*Ild
         Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_magnitude**2)*Ild
         Frot_magnitude = rho*crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot
-        writeArraytoFile(Fl_magnitude, str(nb) + 'Fl_magnitude_a.txt')
-        writeArraytoFile(Fd_magnitude, str(nb) + 'Fd_magnitude_a.txt')
-        writeArraytoFile(Frot_magnitude, str(nb) + 'Frot_magnitude_a.txt')
+        # writeArraytoFile(Fl_magnitude, 'debug/' + str(nb) + '_Fl_magnitude_a.txt')
+        # writeArraytoFile(Fd_magnitude, 'debug/' + str(nb) + '_Fd_magnitude_a.txt')
+        # writeArraytoFile(Frot_magnitude,'debug/' + str(nb) + '_Frot_magnitude_a.txt')
         #END OF ANALYTICAL VERSION 
     # vector calculation of Fl, Fd, Frot. arrays of the form (nt, 3) 
     for i in range(nt):
@@ -610,7 +604,7 @@ def cost(x, numerical=False, nb=100, show_plots=False):
         plt.legend()
         plt.show()
         generatePlotsForKinematicsSequence()
-    return K 
+    return K
 
 #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
 #for what x_0 values/input this minimum is attained  
@@ -622,46 +616,47 @@ def main():
     optimize = False
     if optimize:
         start = time.time()
-        optimization = opt.minimize(cost, bounds=bounds, x0=x_0)#, maxiter=1000)
+        optimization = opt.minimize(cost, args=(True, 1000), bounds=bounds, x0=x_0)
         x0_final = optimization.x
         K_final = optimization.fun
         print('completed in:', round(time.time() - start, 3), ' seconds')
     else:
         x0_final = [0.225, 1.58,  1.92, -1.55]
-        K_final = 0.5108267902800643
-        cost(x0_final, numerical=False, nb=2, show_plots=False)
-    print('x0_final: ', np.round(x0_final, 3), '\nK_final: ', K_final)
-    # cost(x0_final, show_plots=False)
+        K_final = ''
+        # cost(x0_final, numerical=False, nb=500000, show_plots=False)
+    print('x0_final: ', np.round(x0_final, 5), '\nK_final: ', K_final)
+    cost(x0_final, show_plots=False)
 
-def main2(nb): 
-    kinematics()
-    result = []
-    for i in range(2):
-        x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
-        bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-        optimize = False
-        if optimize:
-            start = time.time()
-            optimization = opt.minimize(cost,args=(i==1, nb), bounds=bounds, x0=x_0)#, maxiter=1000)
-            x0_final = optimization.x
-            K_final = optimization.fun
-            print('completed in:', round(time.time() - start, 3), ' seconds')
-        else:
-            x0_final = [0.225, 1.58,  1.92, -1.55]
-            K_final = 0.5108267902800643
-            cost(x_0)
-        print('x0_final: ', x0_final, '\nK_final: ', K_final)
-        result.append([np.round(K_final, 2), np.round(x0_final, 2)])
-    return result
-# import cProfile
-# import pstats
-# import io
-# profile = cProfile.Profile()
-# profile.enable()
+# def main2(nb): 
+#     kinematics()
+#     result = []
+#     for i in range(2):
+#         x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+#         bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+#         optimize = True
+#         if optimize:
+#             start = time.time()
+#             optimization = opt.minimize(cost,args=(i==1, nb), bounds=bounds, x0=x_0)
+#             x0_final = optimization.x
+#             K_final = optimization.fun
+#             print('completed in:', round(time.time() - start, 3), ' seconds')
+#         else:
+#             x0_final = [0.225, 1.58,  1.92, -1.55]
+#             K_final = 0.5108267902800643
+#             cost(x_0)
+#         print('x0_final: ', x0_final, '\nK_final: ', K_final)
+#         result.append([np.round(K_final, 2), np.round(x0_final, 2)])
+#     return result
+
+# # import cProfile
+# # import pstats
+# # import io
+# # profile = cProfile.Profile()
+# # profile.enable()
 main()
-# profile.disable()
-# s = io.StringIO()
-# ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
-# ps.print_stats()
-# with open('debug/profile.txt', 'w+') as f:
-#     f.write(s.getvalue())
+# # profile.disable()
+# # s = io.StringIO()
+# # ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
+# # ps.print_stats()
+# # with open('debug/profile.txt', 'w+') as f:
+# #     f.write(s.getvalue())
