@@ -467,7 +467,7 @@ import scipy.optimize as opt
 import time
 
 #cost function which tells us how far off our QSM values are from the CFD ones
-def cost(x, numerical=False, nb=100, show_plots=False):
+def cost(x, numerical=False, nb=1000, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
@@ -499,7 +499,7 @@ def cost(x, numerical=False, nb=100, show_plots=False):
     #with their corresponding vectors. to fix this, we reshape cl and cd to be of shape (nt,)
     cl = cl.reshape(nt,) 
     cd = cd.reshape(nt,)
-
+    _planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
     if numerical:
         #START OF NUMERICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -510,7 +510,6 @@ def cost(x, numerical=False, nb=100, show_plots=False):
         Fd_magnitude = np.zeros(nt)
         Frot_magnitude = np.zeros(nt)
 
-        planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
         # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
         # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
         # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (nt,) array is returned.
@@ -522,9 +521,8 @@ def cost(x, numerical=False, nb=100, show_plots=False):
             #now, since we are looping over the span (y_space) here, we have to calculate the absolute planar linear velocity for each blade by computing the cross product 
             #of the absolute planar angular velocity and the absolute radius of each blade (y_blade_g). 
             r = y_space[i] - y_space[0]
-            # y_blade_g = r*y_wing_g_sequence #(nt,3)
-            blade_planar_us_wing_g = r*planar_rots_wing_g
-            # blade_planar_us_wing_g = np.cross(planar_rots_wing_g, y_blade_g, axis=1)
+            y_blade_g = r*y_wing_g_sequence #(nt,3)
+            blade_planar_us_wing_g = np.cross(_planar_rots_wing_g, y_blade_g, axis=1)
             blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
             
             Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
@@ -608,7 +606,7 @@ def main():
     kinematics()
     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-    optimize = True
+    optimize = False
     nb = 100 #nb: number of blades 
     numerical = False 
     if optimize:
@@ -625,9 +623,14 @@ def main():
     else:
         x0_final = [0.225, 1.58,  1.92, -1.55]
         K_final = ''
-        # cost(x0_final, numerical=False, nb=500000, show_plots=False)
+        if numerical:
+            print('Computing using the numerical approach')
+        else: 
+            print('Computing using the analytical approach')
+        print('Computing for: ' + str(nb) + ' blades')
+        cost(x0_final, numerical, nb, show_plots=False)
     print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
-    cost(x0_final, show_plots=False)
+    # cost(x0_final, show_plots=False)
 
 # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
 # #the results also fluctuate quite a bit using this optimizer.
