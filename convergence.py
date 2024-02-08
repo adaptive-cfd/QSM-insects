@@ -138,7 +138,7 @@ plt.show()
 
 plt.loglog(n_blades, Frot_mean_a, label='Frot_mean_analytical')
 plt.loglog(n_blades, Frot_mean_n, label='Frot_mean_numerical')
-plt.title('log-log plot for both Fd_mean_analytical and Fd_mean_numerical .vs. number of blades')
+plt.title('log-log plot for both Frot_mean_analytical and Frot_mean_numerical .vs. number of blades')
 plt.xlabel('number of blades []')
 plt.ylabel('Frot_mean [N]')
 plt.show()
