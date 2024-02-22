@@ -16,7 +16,7 @@ import functools
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from python_tools_master import insect_tools as it 
 from python_tools_master import wabbit_tools as wt
-#from debug import writeArraytoFile
+from debug import writeArraytoFile
 
 #global variables:
 isLeft = wt.get_ini_parameter('cfd_run/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
@@ -47,7 +47,6 @@ wingtip_index = np.argmax(wingPoints[:, 1])
 # plt.show()
 # exit()
 
-
 # spanwise normalization   
 min_y = np.min(wingPoints[:, 1])
 max_y = np.max(wingPoints[:, 1])
@@ -63,7 +62,6 @@ phis = np.radians(phis)
 alphas = np.radians(alphas)
 thetas = np.radians(thetas)
 
-
 #timeline reassignment. when the timeline from the function eval_angles_kinematics_file is used 
 #the last point of the timeline is the same as the first one (so timeline[0] = timeline[-1])
 #to solve this we can either do a variable reassigment or remove the last entry in timeline. the second method
@@ -77,17 +75,23 @@ alphas_dt_sequence = np.zeros((nt))
 phis_dt_sequence = np.zeros((nt))
 thetas_dt_sequence = np.zeros((nt))
 
+alphas_dt_dt_sequence = np.zeros((nt))
+
 strokePointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
 bodyPointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
 globalPointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
 
 rots_wing_b = np.zeros((nt, 3, 1))
+rots_wing_s = np.zeros((nt, 3, 1))
 rots_wing_w = np.zeros((nt, 3, 1))
 rots_wing_g = np.zeros((nt, 3, 1))
 
 planar_rots_wing_s = np.zeros((nt, 3, 1))
 planar_rots_wing_w = np.zeros((nt, 3, 1))
 planar_rots_wing_g = np.zeros((nt, 3, 1))
+
+planar_ang_acc_wing_g = np.zeros((nt, 3, 1))
+planar_ang_acc_wing_w = np.zeros((nt, 3, 1))
 
 us_wing_w = np.zeros((nt, 3, 1))
 us_wing_g = np.zeros((nt, 3, 1))
@@ -103,6 +107,8 @@ e_liftVectors = np.zeros((nt, 3))
 y_wing_g_sequence = np.zeros((nt, 3))
 z_wing_g_sequence = np.zeros((nt, 3))
 
+r = np.zeros((nt, 3))
+
 delta_t = timeline[1] - timeline[0]
 
 forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
@@ -111,28 +117,42 @@ Fx_CFD = forces_CFD[:, 1]
 Fy_CFD = forces_CFD[:, 2]
 Fz_CFD = forces_CFD[:, 3]
 
+moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
+#no need to read in the time again as it's the same from the forces file
+Mx_CFD = moments_CFD[:, 1]
+My_CFD = moments_CFD[:, 2]
+Mz_CFD = moments_CFD[:, 3]
+# M_CFD = moments_CFD[:, 1:4]
+
 if isLeft == False: 
     Fy_CFD = -Fy_CFD
+    My_CFD = -My_CFD
     print('The data correspond to the right wing. They will be adjusted to follow the left wing convention in this code.')
 else: 
     print('The data correspond to the left wing')
 
 if np.round(forces_CFD[-1, 0],3) != time_max: 
-    raise ValueError('CFD cycle number does not match that the actual run. Check your PARAMS and forces files\n')
+    raise ValueError('CFD cycle number does not match that the actual run. Check your PARAMS, forces and moments files\n')
 
-print('The number of cycles is ', time_max, '. The forces data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
+print('The number of cycles is ', time_max, '. The forces and moments data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
 
 Fx_CFD_interp = interp1d(t, Fx_CFD, fill_value='extrapolate')
 Fy_CFD_interp = interp1d(t, Fy_CFD, fill_value='extrapolate')
 Fz_CFD_interp = interp1d(t, Fz_CFD, fill_value='extrapolate')
 
+Mx_CFD_interp = interp1d(t, Mx_CFD,fill_value='extrapolate')
+My_CFD_interp = interp1d(t, My_CFD,fill_value='extrapolate')
+Mz_CFD_interp = interp1d(t, Mz_CFD,fill_value='extrapolate')
+
 Fl = np.zeros((nt, 3))
 Fd = np.zeros((nt, 3))
 Frot = np.zeros((nt, 3))
+Fam = np.zeros((nt, 3))
 
 Fl_magnitude = np.zeros(nt)
 Fd_magnitude = np.zeros(nt)
 Frot_magnitude = np.zeros(nt)
+Fam_magnitude = np.zeros(nt)
 
 #this function calculates the chord length by splitting into 2 segments (LE and TE segment) and then interpolating along the y-axis 
 def getChordLength(wingPoints, y_coordinate):
@@ -179,7 +199,6 @@ def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, invert
         x_s = np.matmul(rotationMatrixTrans, points[point])
         strokePoints[point, :] = x_s
     return strokePoints, rotationMatrix, rotationMatrixTrans
-
 
 def convert_from_stroke_plane_to_body_reference_frame(points, parameters, invert=False):
     #points must be in stroke plane x(s) y(s) z(s)
@@ -236,7 +255,7 @@ def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotatio
     planar_rot_wing_s = np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))
     planar_rot_wing_w = np.matmul(wingRotationMatrix, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt)))))
     planar_rot_wing_g = np.matmul(bodyRotationMatrixTrans, np.matmul(strokeRotationMatrixTrans, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))))
-    return rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w #these are all (3x1) vectors 
+    return rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w #these are all (3x1) vectors 
 
 #since the absolute linear velocity of the wing depends both on time and on the position along the wing
 #this function calculates only its position dependency
@@ -263,6 +282,18 @@ def getAoA(x_wing_g, e_u_wing_g):
     AoA = np.arccos(np.dot(x_wing_g, e_u_wing_g))
     return AoA
 
+def getLever(F, M): 
+#to find the lever we need to solve for r: M = r x F. however since no inverse of the cross product exists, we have to use the vector triple product
+#what we get is: r = M x F/norm(F)^2 + t*F ; where * is the dot product and t is any constant. for this equation to be valid, F and M must be orthogonal to each other, 
+#such that F*M = 0
+    for i in range(nt): 
+        F_norm = (np.linalg.norm(F, axis=1))
+        if F_norm[i] != 0:
+            r[i, :] = np.cross(M[i, :], F[i, :])/F_norm[i]**2 + 1*F[i, :] #here i take t = 1 
+        else: 
+            r[i, :] = 0 
+    return r 
+
 #alternative definition of AoA 
 # def getAoA(drag_vector, x_wing_g):
 #     #should be in the wing reference frame
@@ -279,9 +310,14 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         # thetas_dt = thetas_dt_interp(t)
 
         #here the time derivatives of the angles are calculated by means of 1st order approximations
-        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep]) / delta_t #here we compute the modulus of (timestep+1) and nt to prevent overflowing.  
-        phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / delta_t
-        thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / delta_t
+        if timeStep != 100: 
+            alphas_dt = (alphas[(timeStep+1)] - alphas[timeStep]) / delta_t #here we compute the modulus of (timestep+1) and nt to prevent overflowing.
+            phis_dt = (phis[(timeStep+1)] - phis[timeStep]) / delta_t
+            thetas_dt = (thetas[(timeStep+1)] - thetas[timeStep]) / delta_t
+        else: 
+            alphas_dt = 0
+            phis_dt = 0
+            thetas_dt = 0
 
         alphas_dt_sequence[timeStep] = alphas_dt
         phis_dt_sequence[timeStep] = phis_dt
@@ -307,10 +343,11 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         y_wing_g_sequence[timeStep, :] = y_wing_g.flatten()
         z_wing_g_sequence[timeStep, :] = z_wing_g.flatten()
         
-        rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
+        rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
                                     parameters_dt[5], parameters[6], parameters_dt[6])
         
         rots_wing_b[timeStep, :] = rot_wing_b
+        rots_wing_s[timeStep, :] = rot_wing_s
         rots_wing_w[timeStep, :] = rot_wing_w
         rots_wing_g[timeStep, :] = rot_wing_g
 
@@ -330,7 +367,6 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
 
         u_wind_w = getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
         us_wind_w[timeStep, :] = u_wind_w
-
 
         u_wing_g_magnitude = np.linalg.norm(u_wing_g)
         us_wing_g_magnitude[timeStep] = u_wing_g_magnitude
@@ -356,7 +392,7 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         else:
             e_liftVector = liftVector
         e_liftVectors[timeStep, :] = e_liftVector
-
+    
     #validation of our u_wing_g by means of a first order approximation
     #left and right derivative: 
     verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
@@ -369,7 +405,21 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
     verifying_us_wing_g = verifying_us_wing_g  
 
-def animationPlot(ax, timeStep): 
+    planar_rots_wing_g.reshape(101,3)
+    for timeStep in range(nt):
+        if timeStep != 100: 
+            alphas_dt_dt = (alphas_dt_sequence[timeStep+1] - alphas_dt_sequence[timeStep]) / delta_t
+            planar_ang_acc_wing_g[timeStep, :] = (planar_rots_wing_g[timeStep+1] - planar_rots_wing_g[timeStep])
+            planar_ang_acc_wing_w[timeStep, :] = (planar_rots_wing_w[timeStep+1] - planar_rots_wing_w[timeStep])
+
+        else: 
+            alphas_dt_dt = 0 
+            planar_ang_acc_wing_g[timeStep, :] = 0
+            planar_ang_acc_wing_w[timeStep, :] = 0
+
+        alphas_dt_dt_sequence[timeStep] = alphas_dt_dt
+        
+def animationPlot(ax, timeStep):
     #get point set by timeStep number
     points = globalPointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
     #clear the current axis 
@@ -411,14 +461,22 @@ def animationPlot(ax, timeStep):
     XZ_plane_shadow = np.vstack(((X, a*np.ones_like(Y), Z))).transpose()
     ax.add_collection3d(Poly3DCollection(verts=[XZ_plane_shadow], color='#d3d3d3'))
     
-    #plotting the vector x, y, z, u, v, w
+    #velocity at wingtip 
     u_wing_g = us_wing_g[timeStep]
     ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], u_wing_g[0], u_wing_g[1], u_wing_g[2], color='orange', label=r'$\overrightarrow{u}^{(g)}_w$' )
+    
+    #drag
     e_dragVector_wing_g = e_dragVectors_wing_g[timeStep]
     ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], e_dragVector_wing_g[0], e_dragVector_wing_g[1], e_dragVector_wing_g[2], color='green', label=r'$\overrightarrow{d}^{(g)}_w$' )
+    
     #lift 
     liftVector = e_liftVectors[timeStep]
     ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], liftVector[0], liftVector[1], liftVector[2])
+    
+    # #z_wing_g 
+    # z_wing_g_sequence_plot = z_wing_g_sequence[timeStep]*np.sign(alphas[timeStep])
+    # ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_sequence_plot[0], z_wing_g_sequence_plot[1], z_wing_g_sequence_plot[2], color='red')
+    
     ax.legend()
     
     #set the axis limits
@@ -469,21 +527,9 @@ import time
 #cost function which tells us how far off our QSM values are from the CFD ones
 def cost(x, numerical=False, nb=1000, show_plots=False):
     #global variable must be imported in order to modify them locally
-    global Fl_magnitude, Fd_magnitude, Frot_magnitude, planar_rots_wing_g, y_wing_g_sequence
+    global Fl_magnitude, Fd_magnitude, Frot_magnitude, Fam_magnitude, planar_rots_wing_g, y_wing_g_sequence
 
     cl, cd, crot = getAerodynamicCoefficients(x, np.array(AoA))
-
-    if show_plots: 
-        # plt.plot(timeline, np.degrees(phis), label='ɸ')
-        # plt.plot(timeline, np.degrees(alphas), label ='⍺')
-        # plt.plot(timeline, np.degrees(thetas), label='Θ')
-        # plt.legend()
-        # plt.show()
-
-        plt.plot(timeline, np.degrees(AoA), label='AoA')
-        plt.xlabel('t/T')
-        plt.legend()
-        plt.show()
 
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
@@ -500,6 +546,20 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
     cl = cl.reshape(nt,) 
     cd = cd.reshape(nt,)
     _planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
+    _planar_rots_wing_w = planar_rots_wing_w.reshape(nt,3)
+    _planar_ang_acc_wing_g = planar_ang_acc_wing_g.reshape(nt,3)
+    _planar_ang_acc_wing_w = planar_ang_acc_wing_w.reshape(nt,3) 
+    _alphas_dt_dt_sequence = alphas_dt_dt_sequence
+
+    _planar_ang_acc_wing_g[99, :] = 0
+    _planar_ang_acc_wing_g[100, :] = 0
+
+    _planar_ang_acc_wing_w[99, :] = 0
+    _planar_ang_acc_wing_w[100, :] = 0
+    
+    _alphas_dt_dt_sequence[99] = 0
+    _alphas_dt_dt_sequence[100] = 0
+ 
     if numerical:
         #START OF NUMERICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -509,6 +569,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fl_magnitude = np.zeros(nt)
         Fd_magnitude = np.zeros(nt)
         Frot_magnitude = np.zeros(nt)
+        Fam_magnitude = np.zeros(nt)
 
         # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
         # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
@@ -528,7 +589,10 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-        #END OF NUMERICAL VERSION 
+
+            # Fam_magnitude += rho*np.pi/4*(_planar_ang_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
+            Fam_magnitude += rho*np.pi/4*(_planar_ang_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
+        #END OF NUMERICAL VERSION           
 
     else: 
         #START OF ANALYTICAL VERSION
@@ -562,41 +626,101 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
         Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
+        Fam[i,:] = (Fam_magnitude[i] * -z_wing_g_sequence[i])
    
-    Fx_QSM = Fl[:, 0]+Fd[:, 0]+Frot[:, 0]
-    Fy_QSM = Fl[:, 1]+Fd[:, 1]+Frot[:, 1]
-    Fz_QSM = Fl[:, 2]+Fd[:, 2]+Frot[:, 2]
+    Fx_QSM = Fl[:, 0] + Fd[:, 0] + Frot[:, 0] + Fam[:, 0]
+    Fy_QSM = Fl[:, 1] + Fd[:, 1] + Frot[:, 1] + Fam[:, 1]
+    Fz_QSM = Fl[:, 2] + Fd[:, 2] + Frot[:, 2] + Fam[:, 2]
 
     K_num = np.linalg.norm(Fx_QSM-Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_interp(timeline)) + np.linalg.norm(Fy_QSM+Fy_CFD_interp(timeline))
     K_den = np.linalg.norm(Fx_CFD_interp(timeline)) + np.linalg.norm(Fz_CFD_interp(timeline)) + np.linalg.norm(-Fy_CFD_interp(timeline))
+     
     if K_den != 0: 
         K = K_num/K_den
     else:
         K = K_num
+
+    F_QSM = np.vstack((Fx_QSM, Fy_QSM, Fz_QSM)).transpose()
+    M_CFD = np.vstack((Mx_CFD_interp(timeline), My_CFD_interp(timeline), Mz_CFD_interp(timeline))).transpose()
+
+    F_QSM = np.array(F_QSM)
+    M_CFD = np.array(M_CFD)
+
+    r = getLever(F_QSM, M_CFD)
+
     if show_plots:
+        # plt.plot(timeline, np.degrees(phis), label='ɸ')
+        # plt.plot(timeline, np.degrees(alphas), label ='⍺')
+        # plt.plot(timeline, np.degrees(thetas), label='Θ')
+        # plt.legend()
+        # plt.show()
+
+        #AoA
+        plt.plot(timeline, np.degrees(AoA), label='AoA', color = '#F1680F')
+        plt.xlabel('t/T')
+        plt.legend()
+        plt.show()
+
+        #coefficients
         graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
         gCl, gCd, gCrot = getAerodynamicCoefficients(x, graphAoA)
         fig, ax = plt.subplots()
-        ax.plot(np.degrees(graphAoA), gCl, label='Cl')
-        ax.plot(np.degrees(graphAoA), gCd, label='Cd')
+        ax.plot(np.degrees(graphAoA), gCl, label='Cl', color='#0F95F1')
+        ax.plot(np.degrees(graphAoA), gCd, label='Cd', color='#F1AC0F')
         # ax.plot(np.degrees(graphAoA), gCrot*np.ones_like(gCl), label='Crot')
         ax.set_xlabel('AoA[°]')
         plt.legend()
         plt.show()
 
+        #forces
         plt.plot(timeline[:], Fx_QSM, label='Fx_QSM', color='red')
-        plt.plot(timeline[:], Fy_QSM, label='Fy_QSM', color='green') #-Fy because the data being used corresponds ot a right 
+        plt.plot(timeline[:], Fy_QSM, label='Fy_QSM', color='green')
         plt.plot(timeline[:], Fz_QSM, label='Fz_QSM', color='blue')
         plt.plot(timeline[:], Fx_CFD_interp(timeline), label='Fx_CFD', linestyle = 'dashed', color='red')
         plt.plot(timeline[:], Fy_CFD_interp(timeline), label='Fy_CFD', linestyle = 'dashed', color='green')
         plt.plot(timeline[:], Fz_CFD_interp(timeline), label='Fz_CFD', linestyle = 'dashed', color='blue')
-        plt.xlabel('t/T')
-        plt.ylabel('Force')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Force [mN]')
         plt.title(f'Fx_QSM/Fx_CFD = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_interp(timeline)), 3)}; Fz_QSM/Fz_CFD = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_interp(timeline)), 3)}')
         plt.legend()
+        # plt.savefig('qsm', dpi=2000)
         plt.show()
+
+        #vertical forces
+        plt.plot(timeline, Fl[:, 2], label = 'Vertical lift force', color='gold')
+        plt.plot(timeline, Frot[:, 2], label = 'Vertical rotational force', color='orange')
+        plt.plot(timeline, Fd[:, 2], label = 'Vertical drag force', color='lightgreen')
+        plt.plot(timeline, Fam[:, 2], label = 'Vertical added mass force', color='red')
+        plt.plot(timeline, Fz_QSM, label = 'Vertical QSM force', color='blue')
+        plt.plot(timeline, Fz_CFD_interp(timeline), label = 'Vertical CFD force', color='purple')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Force [mN]')
+        plt.legend()
+        # plt.savefig('debug/vertical_forces_no_Fam', dpi=2000)
+        plt.show()
+
+        # #lever
+        # plt.plot(timeline, r[:, 0], color='#C00891', label='Lever x-component')
+        # plt.plot(timeline, r[:, 1], color='#0F2AEE', label='Lever y-component')
+        # plt.plot(timeline, r[:, 2], color='#0FEE8C', label='Lever z-component')
+        # # plt.plot(timeline, np.linalg.norm(r, axis=1), color='#08C046', label='Lever magnitude')
+        # plt.xlabel('t/T [s]')
+        # plt.ylabel('Lever [mm]')
+        # plt.legend()
+        # # plt.savefig('debug/r', dpi=2000)
+        # plt.show()
+
+        # #moments
+        # plt.plot(timeline[:], Mx_CFD_interp(timeline), label='Mx_CFD', linestyle = 'dashed', color='red')
+        # plt.plot(timeline[:], My_CFD_interp(timeline), label='My_CFD', linestyle = 'dashed', color='green')
+        # plt.plot(timeline[:], Mz_CFD_interp(timeline), label='Mz_CFD', linestyle = 'dashed', color='blue')
+        # plt.xlabel('t/T [s]')
+        # plt.ylabel('Moment [mN*m]')
+        # plt.legend()
+        # plt.savefig('debug/moments', dpi=2000)
+
         generatePlotsForKinematicsSequence()
-    return K 
+    return K
 
 #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
 #for what x_0 values/input this minimum is attained  
@@ -606,9 +730,9 @@ def main():
     kinematics()
     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-    optimize = False
-    nb = 100 #nb: number of blades 
-    numerical = False 
+    optimize = True
+    nb = 1000 #nb: number of blades 
+    numerical = True 
     if optimize:
         start = time.time()
         optimization = opt.minimize(cost, args=(numerical, nb), bounds=bounds, x0=x_0)
@@ -628,9 +752,9 @@ def main():
         else: 
             print('Computing using the analytical approach')
         print('Computing for: ' + str(nb) + ' blades')
-        cost(x0_final, numerical, nb, show_plots=False)
+        cost(x0_final, numerical, nb, show_plots=True)
     print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
-    # cost(x0_final, show_plots=False)
+    cost(x0_final, show_plots=True)
 
 # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
 # #the results also fluctuate quite a bit using this optimizer.

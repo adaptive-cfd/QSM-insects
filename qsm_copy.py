@@ -610,65 +610,66 @@ def cost(x, numerical=False, nb=100, show_plots=False):
 #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
 #for what x_0 values/input this minimum is attained  
 
-# def main():
-#     kinematics()
-#     x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
-#     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-#     optimize = False
-#     nb = 100 #nb: number of blades 
-#     numerical = False 
-#     if optimize:
-#         start = time.time()
-#         optimization = opt.minimize(cost, args=(numerical, nb), bounds=bounds, x0=x_0)
-#         x0_final = optimization.x
-#         K_final = optimization.fun
-#         if numerical:
-#             print('Computing using the numerical approach')
-#         else: 
-#             print('Computing using the analytical approach')
-#         print('Computing for: ' + str(nb) + ' blades')
-#         print('Completed in:', round(time.time() - start, 3), 'seconds')
-#     else:
-#         x0_final = [0.225, 1.58,  1.92, -1.55]
-#         K_final = ''
-#         if numerical:
-#             print('Computing using the numerical approach')
-#         else: 
-#             print('Computing using the analytical approach')
-#         print('Computing for: ' + str(nb) + ' blades')
-#         cost(x0_final, numerical, nb, show_plots=False)
-#     print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
-#     # cost(x0_final, show_plots=False)
-
-def main2(nb): 
+def main():
     kinematics()
-    result = []
-    for i in range(2):
-        x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
-        bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
-        optimize = True
-        if optimize:
-            start = time.time()
-            optimization = opt.minimize(cost,args=(i==1, nb), bounds=bounds, x0=x_0)
-            x0_final = optimization.x
-            K_final = optimization.fun
-            print('completed in:', round(time.time() - start, 3), ' seconds')
-        else:
-            x0_final = [0.225, 1.58,  1.92, -1.55]
-            K_final = ''
-            # cost(x_0)
-            # K, Fl_magnitude, Fd_magnitude, Frot_magnitude =  cost(x_0, i==1, nb)
-        # print('x0_final: ', x0_final, '\nK_final: ', K_final)
-        result.append([np.round(K_final, 2), np.round(x0_final, 2)])
-        # result.append([np.mean(Fl_magnitude), np.mean(Fd_magnitude), np.mean(Frot_magnitude)])
-    return result
+    x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+    bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+    optimize = True
+    nb = 100 #nb: number of blades 
+    numerical = True 
+    if optimize:
+        start = time.time()
+        optimization = opt.minimize(cost, args=(numerical, nb), bounds=bounds, x0=x_0)
+        x0_final = optimization.x
+        K_final = optimization.fun
+        if numerical:
+            print('Computing using the numerical approach')
+        else: 
+            print('Computing using the analytical approach')
+        print('Computing for: ' + str(nb) + ' blades')
+        print('Completed in:', round(time.time() - start, 3), 'seconds')
+    else:
+        x0_final = [0.225, 1.58,  1.92, -1.55]
+        K_final = ''
+        if numerical:
+            print('Computing using the numerical approach')
+        else: 
+            print('Computing using the analytical approach')
+        print('Computing for: ' + str(nb) + ' blades')
+        cost(x0_final, numerical, nb, show_plots=False)
+    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+    cost(x0_final, show_plots=True)
 
+# def main2(nb): 
+#     kinematics()
+#     result = []
+#     for i in range(2):
+#         x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
+#         bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+#         optimize = False
+#         if optimize:
+#             start = time.time()
+#             optimization = opt.minimize(cost,args=(i==1, nb), bounds=bounds, x0=x_0)
+#             x0_final = optimization.x
+#             K_final = optimization.fun
+#             print('completed in:', round(time.time() - start, 3), ' seconds')
+#         else:
+#             x0_final = [0.225, 1.58,  1.92, -1.55]
+#             K_final = ''
+#             cost(x_0, i==1, nb)
+#             # K, Fl_magnitude, Fd_magnitude, Frot_magnitude =  cost(x_0, i==1, nb)
+#         # print('x0_final: ', x0_final, '\nK_final: ', K_final)
+#         # result.append([np.round(K_final, 2), np.round(x0_final, 2)])
+#         # result.append([np.mean(Fl_magnitude), np.mean(Fd_magnitude), np.mean(Frot_magnitude)])
+#     return result
+
+# main2(5000)
 # import cProfile
 # import pstats
 # import io
 # profile = cProfile.Profile()
 # profile.enable()
-# main()
+main()
 # profile.disable()
 # s = io.StringIO()
 # ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime

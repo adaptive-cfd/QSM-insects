@@ -29,7 +29,7 @@ def convergenceTest():
     x0_1.close()
     x0_2.close()
     x0_3.close()
-convergenceTest()
+# convergenceTest()
 
 def convergenceTestForces(): 
     from qsm_copy import main2
@@ -49,20 +49,20 @@ def convergenceTestForces():
 # convergenceTestForces()
 
 
-def standardDeviation(file_a, file_n): 
-    with open(file_a, 'r') as file1: 
-        file_analytical = file1.readlines()
-    with open(file_n, 'r') as file2: 
-        file_numerical = file2.readlines()
-    N = 0 
-    error_sqrd = 0 
-    for analytical, numerical in zip(file_analytical, file_numerical):
-        error = float(analytical) - float(numerical)
-        error_sqrd += error**2 
-        N += 1
-    return np.sqrt(error_sqrd / N)
+# def standardDeviation(file_a, file_n): 
+#     with open(file_a, 'r') as file1: 
+#         file_analytical = file1.readlines()
+#     with open(file_n, 'r') as file2: 
+#         file_numerical = file2.readlines()
+#     N = 0 
+#     error_sqrd = 0 
+#     for analytical, numerical in zip(file_analytical, file_numerical):
+#         error = float(analytical) - float(numerical)
+#         error_sqrd += error**2 
+#         N += 1
+#     return np.sqrt(error_sqrd / N)
 
-# nb = 500000
+# nb = 5000
 # print('computing standard devition for', nb, 'blades')
 # Fl_deviation = standardDeviation('debug/' + str(nb) + '_Fl_magnitude_a.txt', 'debug/' + str(nb) + '_Fl_magnitude_n.txt')
 # print(np.round(Fl_deviation, 4))
