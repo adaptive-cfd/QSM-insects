@@ -933,7 +933,9 @@ def eval_angles_kinematics_file(fname, time=None):
 def Rx( angle ):
     # rotation matrix around x axis
     Rx = np.ndarray([3,3])
-    Rx = [[1.0,0.0,0.0],[0.0,np.cos(angle),np.sin(angle)],[0.0,-np.sin(angle),np.cos(angle)]]
+    Rx = [[1.0,0.0,0.0],
+          [0.0,np.cos(angle),np.sin(angle)],
+          [0.0,-np.sin(angle),np.cos(angle)]]
     # note the difference between array and matrix (it is the multiplication)
     Rx = np.matrix( Rx )
     return Rx
@@ -951,7 +953,9 @@ def Ry( angle ):
 def Rz( angle ):
     # rotation matrix around z axis
     Rx = np.ndarray([3,3])
-    Rx = [[ np.cos(angle),+np.sin(angle),0.0],[-np.sin(angle),np.cos(angle),0.0],[0.0,0.0,1.0]]
+    Rx = [[ np.cos(angle),+np.sin(angle),0.0],
+          [-np.sin(angle),np.cos(angle),0.0],
+          [0.0,0.0,1.0]]
     # note the difference between array and matrix (it is the multiplication)
     Rx = np.matrix( Rx )
     return Rx
