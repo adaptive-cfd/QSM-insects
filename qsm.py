@@ -327,17 +327,6 @@ def generateSequence():
         phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
         thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep-1]) / (2*delta_t)
 
-
-        alphas_dt_sequence[timeStep] = alphas_dt
-        phis_dt_sequence[timeStep] = phis_dt
-        thetas_dt_sequence[timeStep] = thetas_dt
-
-        phis_dt_dt = (phis_dt_sequence[(timeStep+1)%nt] - phis_dt_sequence[timeStep-1]) / (2*delta_t)
-        thetas_dt_dt = (thetas_dt_sequence[(timeStep+1)%nt] - thetas_dt_sequence[timeStep-1]) / (2*delta_t)
-
-        phis_dt_dt_sequence[timeStep] = phis_dt_dt
-        thetas_dt_dt_sequence[timeStep] = thetas_dt_dt
-
         parameters = [0, 0, 0, -80*np.pi/180, phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
         parameters_dt = [0, 0, 0, 0, phis_dt, alphas_dt, thetas_dt]
         
@@ -417,29 +406,41 @@ def generateSequence():
         else:
             e_liftVector = liftVector
         e_liftVectors[timeStep, :] = e_liftVector
-    
-    #validation of our u_wing_g by means of a first order approximation
-    #left and right derivative: 
-    verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
-    for timeStep in range(nt):
-        currentGlobalPoint = globalPointsSequence[timeStep]
-        leftGlobalPoint = globalPointsSequence[timeStep-1]
-        rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
-        LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
-        RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
-        verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
-    verifying_us_wing_g = verifying_us_wing_g  
 
-    for timeStep in range(nt):
-        alphas_dt_dt = (alphas[(timeStep+1)%nt] -2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #central difference
+        alphas_dt_sequence[timeStep] = alphas_dt
+        phis_dt_sequence[timeStep] = phis_dt
+        thetas_dt_sequence[timeStep] = thetas_dt
+
+        alphas_dt_dt = (alphas[(timeStep+1)%nt] - 2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #central difference
+        phis_dt_dt = (phis[(timeStep+1)%nt] - 2*phis[timeStep] + phis[timeStep-1]) / (delta_t**2)
+        thetas_dt_dt = (thetas[(timeStep+1)%nt] - 2*thetas[timeStep] + thetas[timeStep-1]) / (delta_t**2)
+
+        # phis_dt_dt = (phis_dt_sequence[(timeStep+1)%nt] - phis_dt_sequence[timeStep-1]) / (2*delta_t)
+        # thetas_dt_dt = (thetas_dt_sequence[(timeStep+1)%nt] - thetas_dt_sequence[timeStep-1]) / (2*delta_t)
+
+       
         alphas_dt_dt_sequence[timeStep] = alphas_dt_dt
+        phis_dt_dt_sequence[timeStep] = phis_dt_dt
+        thetas_dt_dt_sequence[timeStep] = thetas_dt_dt
         
         planar_rot_acc_wing_s[timeStep, :] = [[phis_dt_dt_sequence[timeStep]], 
                                               [-thetas_dt_dt_sequence[timeStep]*np.sin(phis[timeStep]) - thetas_dt_sequence[timeStep]*np.cos(phis[timeStep])*phis_dt_sequence[timeStep]],
                                                 [thetas_dt_dt_sequence[timeStep]*np.cos(phis[timeStep]) + thetas_dt_sequence[timeStep]*np.sin(phis[timeStep])*phis_dt_sequence[timeStep]]]
         planar_rot_acc_wing_w[timeStep, :] = np.matmul(wingRotationMatrix_sequence[timeStep], planar_rot_acc_wing_s[timeStep])
+        
         # planar_rot_acc_wing_w[timeStep, :] = ((planar_rots_wing_w[(timeStep+1)%nt] - planar_rots_wing_w[timeStep-1])) / (2*delta_t)
-    
+        # planar_rot_acc_wing_w[timeStep, :] = ((planar_rots_wing_w[(timeStep+1)%nt] - planar_rots_wing_w[timeStep])) / (delta_t)
+
+    #validation of our u_wing_g by means of a first order approximation
+    #left and right derivative: 
+    verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
+    currentGlobalPoint = globalPointsSequence[timeStep]
+    leftGlobalPoint = globalPointsSequence[timeStep-1]
+    rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
+    LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
+    RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
+    verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
+    verifying_us_wing_g = verifying_us_wing_g         
         
 def animationPlot(ax, timeStep):
     #get point set by timeStep number
@@ -608,8 +609,8 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             # Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             
-            Fam_magnitude1 += rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr
-            Fam_magnitude2 += rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
+            # Fam_magnitude1 += rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr
+            # Fam_magnitude2 += rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
         #END OF NUMERICAL VERSION           
     else: 
         #START OF ANALYTICAL VERSION
@@ -653,8 +654,10 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
     # writeArraytoFile(Fam_magnitude2, 'debug/Fam_mag2.txt')
     # writeArraytoFile(alphas_dt_dt_sequence, 'debug/alphas_dt_dt2.txt')
     # writeArraytoFile(alphas, 'debug/alphas.txt')
-    # writeArraytoFile(planar_rot_acc_wing_w, 'debug/planar_rot_acc_wing_w2.txt')
-    # writeArraytoFile(planar_rot_acc_wing_s, 'debug/planar_rot_acc_wing_s.txt')
+    # writeArraytoFile(planar_rot_acc_wing_w, 'debug/planar_rot_acc_wing_w(2nd_order).txt')
+    # writeArraytoFile(planar_rot_acc_wing_s, 'debug/planar_rot_acc_wing_s(1st_order).txt')
+    # writeArraytoFile(phis_dt_dt_sequence, 'debug/phis_2nd_order.txt')
+    # writeArraytoFile(thetas_dt_dt_sequence, 'debug/thetas_2nd_order.txt')
     # exit()
     
     Fx_QSM = Fl[:, 0] + Fd[:, 0] + Frot[:, 0] + Fam[:, 0]
