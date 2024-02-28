@@ -322,10 +322,13 @@ def generateSequence():
         # phis_dt = phis_dt_interp(t)
         # thetas_dt = thetas_dt_interp(t)
 
-        #here the time derivatives of the angles are calculated by means of 1st order approximations
+        #here the 1st time derivatives of the angles are calculated by means of 2nd order central difference approximations
         alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep-1]) / (2*delta_t) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
         phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
         thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep-1]) / (2*delta_t)
+        
+        # phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / (delta_t) #1dt order forward difference approximation of 1st derivative of phi
+        # thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / (delta_t)
 
         parameters = [0, 0, 0, -80*np.pi/180, phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
         parameters_dt = [0, 0, 0, 0, phis_dt, alphas_dt, thetas_dt]
@@ -411,12 +414,12 @@ def generateSequence():
         phis_dt_sequence[timeStep] = phis_dt
         thetas_dt_sequence[timeStep] = thetas_dt
 
-        alphas_dt_dt = (alphas[(timeStep+1)%nt] - 2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #central difference
-        phis_dt_dt = (phis[(timeStep+1)%nt] - 2*phis[timeStep] + phis[timeStep-1]) / (delta_t**2)
-        thetas_dt_dt = (thetas[(timeStep+1)%nt] - 2*thetas[timeStep] + thetas[timeStep-1]) / (delta_t**2)
+        alphas_dt_dt = (alphas[(timeStep+1)%nt] - 2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of alpha
+        phis_dt_dt = (phis[(timeStep+1)%nt] - 2*phis[timeStep] + phis[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of phi
+        thetas_dt_dt = (thetas[(timeStep+1)%nt] - 2*thetas[timeStep] + thetas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of theta
 
-        # phis_dt_dt = (phis_dt_sequence[(timeStep+1)%nt] - phis_dt_sequence[timeStep-1]) / (2*delta_t)
-        # thetas_dt_dt = (thetas_dt_sequence[(timeStep+1)%nt] - thetas_dt_sequence[timeStep-1]) / (2*delta_t)
+        # phis_dt_dt = (phis_dt_sequence[(timeStep+1)%nt] - phis_dt_sequence[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of phi_dt
+        # thetas_dt_dt = (thetas_dt_sequence[(timeStep+1)%nt] - thetas_dt_sequence[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of theta_dt
 
        
         alphas_dt_dt_sequence[timeStep] = alphas_dt_dt
@@ -426,22 +429,22 @@ def generateSequence():
         planar_rot_acc_wing_s[timeStep, :] = [[phis_dt_dt_sequence[timeStep]], 
                                               [-thetas_dt_dt_sequence[timeStep]*np.sin(phis[timeStep]) - thetas_dt_sequence[timeStep]*np.cos(phis[timeStep])*phis_dt_sequence[timeStep]],
                                                 [thetas_dt_dt_sequence[timeStep]*np.cos(phis[timeStep]) + thetas_dt_sequence[timeStep]*np.sin(phis[timeStep])*phis_dt_sequence[timeStep]]]
-        planar_rot_acc_wing_w[timeStep, :] = np.matmul(wingRotationMatrix_sequence[timeStep], planar_rot_acc_wing_s[timeStep])
+        planar_rot_acc_wing_w[timeStep, :] = np.matmul(wingRotationMatrix, planar_rot_acc_wing_s[timeStep])
         
         # planar_rot_acc_wing_w[timeStep, :] = ((planar_rots_wing_w[(timeStep+1)%nt] - planar_rots_wing_w[timeStep-1])) / (2*delta_t)
         # planar_rot_acc_wing_w[timeStep, :] = ((planar_rots_wing_w[(timeStep+1)%nt] - planar_rots_wing_w[timeStep])) / (delta_t)
 
-    #validation of our u_wing_g by means of a first order approximation
-    #left and right derivative: 
-    verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
-    currentGlobalPoint = globalPointsSequence[timeStep]
-    leftGlobalPoint = globalPointsSequence[timeStep-1]
-    rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
-    LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
-    RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
-    verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
-    verifying_us_wing_g = verifying_us_wing_g         
-        
+        #validation of our u_wing_g by means of a first order approximation
+        #left and right derivative: 
+        verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
+        currentGlobalPoint = globalPointsSequence[timeStep]
+        leftGlobalPoint = globalPointsSequence[timeStep-1]
+        rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
+        LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
+        RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
+        verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
+        verifying_us_wing_g = verifying_us_wing_g
+       
 def animationPlot(ax, timeStep):
     #get point set by timeStep number
     points = globalPointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
@@ -490,15 +493,16 @@ def animationPlot(ax, timeStep):
     
     #drag
     e_dragVector_wing_g = e_dragVectors_wing_g[timeStep]
-    ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], e_dragVector_wing_g[0], e_dragVector_wing_g[1], e_dragVector_wing_g[2], color='green', label=r'$\overrightarrow{d}^{(g)}_w$' )
+    ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], e_dragVector_wing_g[0], e_dragVector_wing_g[1], e_dragVector_wing_g[2], color='green', label=r'$\overrightarrow{e_D}^{(g)}_w$' )
     
     #lift 
     liftVector = e_liftVectors[timeStep]
-    ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], liftVector[0], liftVector[1], liftVector[2])
+    ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], liftVector[0], liftVector[1], liftVector[2], color='blue', label=r'$\overrightarrow{e_L}^{(g)}_w$')
     
-    # #z_wing_g 
-    # z_wing_g_sequence_plot = z_wing_g_sequence[timeStep]*np.sign(alphas[timeStep])
-    # ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_sequence_plot[0], z_wing_g_sequence_plot[1], z_wing_g_sequence_plot[2], color='red')
+    #z_wing_g 
+    z_wing_g_sequence_plot = z_wing_g_sequence[timeStep]*np.sign(alphas[timeStep])
+    ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_sequence_plot[0], z_wing_g_sequence_plot[1], z_wing_g_sequence_plot[2], color='red', label=r'$\overrightarrow{e_{F_{am}}}^{(g)}_w$')
+
     
     ax.legend()
     
@@ -538,7 +542,10 @@ def getAerodynamicCoefficients(x0, AoA):
     cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
     cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
     crot = x0[3]
-    return cl, cd, crot
+    cam1 = x0[4]
+    cam2 = x0[5]
+    cam3 = x0[6]
+    return cl, cd, crot, cam1, cam2, cam3
 
 ############################################################################################################################################################################################
 ##%% main 
@@ -552,7 +559,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, Fam_magnitude, planar_rots_wing_g, y_wing_g_sequence, Fam
 
-    cl, cd, crot = getAerodynamicCoefficients(x, np.array(AoA))
+    cl, cd, crot, cam1, cam2, cam3 = getAerodynamicCoefficients(x, np.array(AoA))
 
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
@@ -584,8 +591,6 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fd_magnitude = np.zeros(nt)
         Frot_magnitude = np.zeros(nt)
         Fam_magnitude = np.zeros(nt)
-        Fam_magnitude1 = np.zeros(nt)
-        Fam_magnitude2 = np.zeros(nt)
 
         # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
         # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
@@ -606,12 +611,11 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
 
-            Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
+            # Fam_magnitude += cam1*_planar_rot_acc_wing_w[:, 2] + cam2*alphas_dt_sequence*_planar_rots_wing_w[:, 0] + cam3*alphas_dt_dt_sequence
+            Fam_magnitude += cam2*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + cam1*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             # Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
-            
-            # Fam_magnitude1 += rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr
-            # Fam_magnitude2 += rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
-        #END OF NUMERICAL VERSION           
+        #END OF NUMERICAL VERSION   
+                    
     else: 
         #START OF ANALYTICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -644,20 +648,22 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
         Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
-        Fam[i, :] = (Fam_magnitude[i] * -z_wing_g_sequence[i])
+        Fam[i, :] = (Fam_magnitude[i] * z_wing_g_sequence[i]*np.sign(alphas[i]))
 
-        # Fam[i,:] = (Fam_magnitude[i] * z_wing_w_sequence[i])
+        # Fam[i,:] = (Fam_magnitude[i] * z_wing_w_sequence[i]*np.sign(alphas[i]))
         # Fam[i, :] = np.matmul(bodyRotationMatrixTrans_sequence[i], np.matmul(strokeRotationMatrixTrans_sequence[i], np.matmul(wingRotationMatrixTrans_sequence[i], Fam[i])))
     
     # writeArraytoFile(Fam_magnitude, 'debug/F_am_w_mag.txt')
     # writeArraytoFile(Fam_magnitude1, 'debug/Fam_mag1.txt')
     # writeArraytoFile(Fam_magnitude2, 'debug/Fam_mag2.txt')
     # writeArraytoFile(alphas_dt_dt_sequence, 'debug/alphas_dt_dt2.txt')
-    # writeArraytoFile(alphas, 'debug/alphas.txt')
-    # writeArraytoFile(planar_rot_acc_wing_w, 'debug/planar_rot_acc_wing_w(2nd_order).txt')
+    # writeArraytoFile(phis, 'debug/phis.txt')
+    # writeArraytoFile(thetas, 'debug/thetas.txt')
+    # writeArraytoFile(planar_rot_acc_wing_w, 'debug/planar_rot_acc_wing_w(2nd_order_2).txt')
     # writeArraytoFile(planar_rot_acc_wing_s, 'debug/planar_rot_acc_wing_s(1st_order).txt')
-    # writeArraytoFile(phis_dt_dt_sequence, 'debug/phis_2nd_order.txt')
-    # writeArraytoFile(thetas_dt_dt_sequence, 'debug/thetas_2nd_order.txt')
+    # writeArraytoFile(phis_dt_sequence, 'debug/phis_dt_forward.txt')
+    # writeArraytoFile(thetas_dt_sequence, 'debug/thetas_dt_forward.txt')
+    # print(thetas_dt_dt_sequence)
     # exit()
     
     Fx_QSM = Fl[:, 0] + Fd[:, 0] + Frot[:, 0] + Fam[:, 0]
@@ -695,7 +701,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 
         #coefficients
         graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
-        gCl, gCd, gCrot = getAerodynamicCoefficients(x, graphAoA)
+        gCl, gCd, gCrot, gCam1, gCam2, gCam3 = getAerodynamicCoefficients(x, graphAoA)
         fig, ax = plt.subplots()
         ax.plot(np.degrees(graphAoA), gCl, label='Cl', color='#0F95F1')
         ax.plot(np.degrees(graphAoA), gCd, label='Cd', color='#F1AC0F')
@@ -720,7 +726,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 
         #vertical forces
         # plt.plot(timeline, Fl[:, 2], label = 'Vertical lift force', color='gold')
-        # plt.plot(timeline, Frot[:, 2], label = 'Vertical rotational force', color='orange')
+        plt.plot(timeline, Frot[:, 2], label = 'Vertical rotational force', color='orange')
         # plt.plot(timeline, Fd[:, 2], label = 'Vertical drag force', color='lightgreen')
         plt.plot(timeline, Fam[:, 2], label = 'Vertical added mass force', color='red')
         plt.plot(timeline, Fz_QSM, label = 'Vertical QSM force', color='blue')
@@ -760,8 +766,8 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 #optimizing using scipy.optimize.minimize which is faster
 def main():
     kinematics()
-    x_0 = [0.225, 1.58,  1.92, -1.55] #initial definition of x0 following Dickinson 1999
-    bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3)]
+    x_0 = [0.225, 1.58,  1.92, -1.55, 1, 0, 1] #initial definition of x0 following Dickinson 1999
+    bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3)]
     optimize = True
     nb = 1000 #nb: number of blades 
     numerical = True 
