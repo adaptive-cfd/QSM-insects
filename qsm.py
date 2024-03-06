@@ -539,13 +539,13 @@ def getAerodynamicCoefficients(x0, AoA):
     AoA = rad2deg*AoA
     
     # Cl and Cd definitions from Dickinson 1999
-    cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
-    cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
-    crot = x0[3]
-    cam1 = x0[4]
-    cam2 = x0[5]
-    cam3 = x0[6]
-    return cl, cd, crot, cam1, cam2, cam3
+    Cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+    Cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+    Crot = x0[3]
+    Cam1 = x0[4]
+    Cam2 = x0[5]
+    Cam3 = x0[6]
+    return Cl, Cd, Crot, Cam1, Cam2, Cam3
 
 ############################################################################################################################################################################################
 ##%% main 
@@ -559,7 +559,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
     #global variable must be imported in order to modify them locally
     global Fl_magnitude, Fd_magnitude, Frot_magnitude, Fam_magnitude, planar_rots_wing_g, y_wing_g_sequence, Fam
 
-    cl, cd, crot, cam1, cam2, cam3 = getAerodynamicCoefficients(x, np.array(AoA))
+    Cl, Cd, Crot, Cam1, Cam2, Cam3 = getAerodynamicCoefficients(x, np.array(AoA))
 
     # chord calculation 
     y_space = np.linspace(min_y, max_y, 100)
@@ -571,10 +571,10 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 
     rho = 1.225
 
-    #both cl and cd are of shape (nt, 1), this however poses a dimensional issue when the magnitude of the lift/drag force is to be multiplied
-    #with their corresponding vectors. to fix this, we reshape cl and cd to be of shape (nt,)
-    cl = cl.reshape(nt,) 
-    cd = cd.reshape(nt,)
+    #both Cl and Cd are of shape (nt, 1), this however poses a dimensional issue when the magnitude of the lift/drag force is to be multiplied
+    #with their corresponding vectors. to fix this, we reshape Cl and Cd to be of shape (nt,)
+    Cl = Cl.reshape(nt,) 
+    Cd = Cd.reshape(nt,)
     _planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
     _planar_rots_wing_w = planar_rots_wing_w.reshape(nt,3)
     _planar_rot_acc_wing_g = planar_rot_acc_wing_g.reshape(nt,3)
@@ -593,7 +593,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fam_magnitude = np.zeros(nt)
 
         # the numerical computation follows the same original equations as the analytical one, but instead of performing the integral, we calculate the forces
-        # in each blade and then sum them up: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*crot*𝛀(φ,Θ)*r*c^2*dr
+        # in each blade and then sum them up: dFl = 0.5*rho*Cl*𝛀^2(φ,Θ)*r^2*c*dr, dFd = 0.5*rho*Cd*𝛀^2(φ,Θ)*r^2*c*dr, dFrot = 0.5*rho*Crot*𝛀(φ,Θ)*r*c^2*dr
         # calculation of the magnitude of the lift/drag/rotational force for each blade. each force is then summed up for each timestep and a (nt,) array is returned.
         # each row represents a timestep and the value contained therein the total Fl/Fd/Frot for that timestep
         # this loop does the following: it loops over y_space (100, 1000, 10000 however many points the user sets) and for every point it computes the value 
@@ -607,12 +607,12 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             blade_planar_us_wing_g = np.cross(_planar_rots_wing_g, y_blade_g, axis=1)
             blade_planar_us_wing_g_magnitude = np.linalg.norm(blade_planar_us_wing_g, axis=1)
             
-            Fl_magnitude += 0.5*rho*cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
-            Fd_magnitude += 0.5*rho*cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
-            Frot_magnitude += rho*crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+            Fl_magnitude += 0.5*rho*Cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
+            Fd_magnitude += 0.5*rho*Cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
+            Frot_magnitude += rho*Crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
 
-            # Fam_magnitude += cam1*_planar_rot_acc_wing_w[:, 2] + cam2*alphas_dt_sequence*_planar_rots_wing_w[:, 0] + cam3*alphas_dt_dt_sequence
-            Fam_magnitude += cam2*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + cam1*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
+            # Fam_magnitude += Cam1*_planar_rot_acc_wing_w[:, 2] + Cam2*alphas_dt_sequence*_planar_rots_wing_w[:, 0] + Cam3*alphas_dt_dt_sequence
+            Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam2*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             # Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
         #END OF NUMERICAL VERSION   
                     
@@ -621,12 +621,12 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         #computation following Nakata 2015 eqns. 2.4a-c
         c_interpolation = interp1d(y_space, c) #we create a function that interpolates our chord (c) w respect to our span (y_space)
 
-        #the following comes from defining lift/drag in the following way: dFl = 0.5*rho*cl*v^2*c*dr -> where v = linear velocity, c = chord length, dr = chord width
-        #v can be broken into 𝛀(φ,Θ)*r  (cf. lines 245-248). plugging that into our equation we get: dFl = 0.5*rho*cl*𝛀^2(φ,Θ)*r^2*c*dr (lift in each blade)
-        #integrating both sides, and pulling constants out of integrand on RHS: Fl = 0.5*rho*cl*𝛀^2(φ,Θ)*∫c*r^2*dr 
+        #the following comes from defining lift/drag in the following way: dFl = 0.5*rho*Cl*v^2*c*dr -> where v = linear velocity, c = chord length, dr = chord width
+        #v can be broken into 𝛀(φ,Θ)*r  (cf. lines 245-248). plugging that into our equation we get: dFl = 0.5*rho*Cl*𝛀^2(φ,Θ)*r^2*c*dr (lift in each blade)
+        #integrating both sides, and pulling constants out of integrand on RHS: Fl = 0.5*rho*Cl*𝛀^2(φ,Θ)*∫c*r^2*dr 
         #our function def Cr2 then calculates the product of c and r^2 ; I (second moment of area) performs the integration of the product 
-        #drag is pretty much the same except that instead of cl we use cd: Fd = 0.5*rho*cd*𝛀^2(φ,Θ)*∫c*r^2*dr
-        #and the rotational force is defined as follows: Frot = 0.5*rho*crot*𝛀(φ,Θ)*∫c^2*r*dr
+        #drag is pretty much the same except that instead of Cl we use Cd: Fd = 0.5*rho*Cd*𝛀^2(φ,Θ)*∫c*r^2*dr
+        #and the rotational force is defined as follows: Frot = 0.5*rho*Crot*𝛀(φ,Θ)*∫c^2*r*dr
         def Cr2(r): 
             return c_interpolation(r) * r**2
         def C2r(r):
@@ -638,9 +638,9 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         planar_rots_wing_g_magnitude = np.linalg.norm(planar_rots_wing_g, axis=1)
         planar_rots_wing_g_magnitude = planar_rots_wing_g_magnitude.reshape(nt,) #here we reshape to fix dimensionality issues as planar_rots_wing_g_magnitude is of shape (nt, 1) and it should be of shape (nt,)
         rho = 1.225
-        Fl_magnitude = 0.5*rho*cl*(planar_rots_wing_g_magnitude**2)*Ild
-        Fd_magnitude = 0.5*rho*cd*(planar_rots_wing_g_magnitude**2)*Ild
-        Frot_magnitude = rho*crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot
+        Fl_magnitude = 0.5*rho*Cl*(planar_rots_wing_g_magnitude**2)*Ild
+        Fd_magnitude = 0.5*rho*Cd*(planar_rots_wing_g_magnitude**2)*Ild
+        Frot_magnitude = rho*Crot*planar_rots_wing_g_magnitude*alphas_dt_sequence*Irot
         #END OF ANALYTICAL VERSION 
 
     # vector calculation of Fl, Fd, Frot, Fam. arrays of the form (nt, 3) 
