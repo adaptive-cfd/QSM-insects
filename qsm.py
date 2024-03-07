@@ -616,10 +616,10 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fl_magnitude += 0.5*rho*Cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Fd_magnitude += 0.5*rho*Cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*Crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
+            Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2])*r*c[i]**2*dr + Cam2*rho*np.pi/4*(alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam3*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
 
             # Fam_magnitude += Cam1*_planar_rot_acc_wing_w[:, 2] + Cam2*alphas_dt_sequence*_planar_rots_wing_w[:, 0] + Cam3*alphas_dt_dt_sequence
             # Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam2*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
-            Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2])*r*c[i]**2*dr + Cam2*rho*np.pi/4*(alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam3*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             # Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
         #END OF NUMERICAL VERSION   
                     
@@ -744,25 +744,27 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         # plt.savefig('debug/vertical_forces_no_Fam', dpi=2000)
         plt.show()
 
-        # #lever
-        # plt.plot(timeline, r[:, 0], color='#C00891', label='Lever x-component')
-        # plt.plot(timeline, r[:, 1], color='#0F2AEE', label='Lever y-component')
-        # plt.plot(timeline, r[:, 2], color='#0FEE8C', label='Lever z-component')
-        # # plt.plot(timeline, np.linalg.norm(r, axis=1), color='#08C046', label='Lever magnitude')
-        # plt.xlabel('t/T [s]')
-        # plt.ylabel('Lever [mm]')
-        # plt.legend()
-        # # plt.savefig('debug/r', dpi=2000)
-        # plt.show()
+        #lever
+        plt.plot(timeline, r[:, 0], color='#C00891', label='Lever x-component')
+        plt.plot(timeline, r[:, 1], color='#0F2AEE', label='Lever y-component')
+        plt.plot(timeline, r[:, 2], color='#0FEE8C', label='Lever z-component')
+        # plt.plot(timeline, np.linalg.norm(r, axis=1), color='#08C046', label='Lever magnitude')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Lever [mm]')
+        plt.legend()
+        # plt.savefig('debug/r', dpi=2000)
+        plt.show()
 
-        # #moments
-        # plt.plot(timeline[:], Mx_CFD_interp(timeline), label='Mx_CFD', linestyle = 'dashed', color='red')
-        # plt.plot(timeline[:], My_CFD_interp(timeline), label='My_CFD', linestyle = 'dashed', color='green')
-        # plt.plot(timeline[:], Mz_CFD_interp(timeline), label='Mz_CFD', linestyle = 'dashed', color='blue')
-        # plt.xlabel('t/T [s]')
-        # plt.ylabel('Moment [mN*m]')
-        # plt.legend()
+
+        #moments
+        plt.plot(timeline[:], Mx_CFD_interp(timeline), label='Mx_CFD', linestyle = 'dashed', color='red')
+        plt.plot(timeline[:], My_CFD_interp(timeline), label='My_CFD', linestyle = 'dashed', color='green')
+        plt.plot(timeline[:], Mz_CFD_interp(timeline), label='Mz_CFD', linestyle = 'dashed', color='blue')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Moment [mN*m]')
+        plt.legend()
         # plt.savefig('debug/moments', dpi=2000)
+        plt.show()
 
         generatePlotsForKinematicsSequence()
     return K
@@ -773,7 +775,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 #optimizing using scipy.optimize.minimize which is faster
 def main():
     kinematics()
-    x_0 = [0.225, 1.58,  1.92, -1.55, 1, 0, 1] #initial definition of x0 following Dickinson 1999
+    x_0 = [0.225, 1.58,  1.92, -1.55, 1, 1, 1] #initial definition of x0 following Dickinson 1999
     bounds = [(-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3), (-3, 3)]
     optimize = True
     nb = 1000 #nb: number of blades 
