@@ -112,6 +112,9 @@ z_wing_g_sequence = np.zeros((nt, 3))
 
 z_wing_w_sequence = np.zeros((nt, 3))
 
+Zalpha = np.zeros((nt, 3))
+e_Fam = np.zeros((nt, 3))
+
 wingRotationMatrix_sequence = np.zeros((nt, 3, 3))
 wingRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
 strokeRotationMatrix_sequence = np.zeros((nt, 3, 3))
@@ -503,7 +506,10 @@ def animationPlot(ax, timeStep):
     z_wing_g_sequence_plot = z_wing_g_sequence[timeStep]*np.sign(alphas[timeStep])
     ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_sequence_plot[0], z_wing_g_sequence_plot[1], z_wing_g_sequence_plot[2], color='red', label=r'$\overrightarrow{e_{F_{am}}}^{(g)}_w$')
 
-    
+    # #e_Fam 
+    # e_Fam_plot = e_Fam[timeStep]
+    # ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], e_Fam_plot[0], e_Fam_plot[1], e_Fam_plot[2], color='red', label=r'$\overrightarrow{e_{F_{am}}}^{(g)}_w$')
+
     ax.legend()
     
     #set the axis limits
@@ -515,7 +521,7 @@ def animationPlot(ax, timeStep):
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
-    ax.set_title(f'Timestep: {timeStep}, ⍺: {np.round(np.degrees(alphas[timeStep]), 2)}, AoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd: {np.round(Fd[timeStep], 4)} \nFrot: {np.round(Frot[timeStep], 4)}')
+    ax.set_title(f'Timestep: {timeStep}, ⍺: {np.round(np.degrees(alphas[timeStep]), 2)}, AoA: {np.round(np.degrees(AoA[timeStep]), 2)} \nFl: {np.round(Fl[timeStep], 4)} \nFd: {np.round(Fd[timeStep], 4)} \nFrot: {np.round(Frot[timeStep], 4)} \nFam: {np.round(Fam[timeStep], 4)}')
 
 # run the live animation of the wing 
 def generatePlotsForKinematicsSequence():
@@ -650,9 +656,9 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
         Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
         Fam[i, :] = (Fam_magnitude[i] * z_wing_g_sequence[i]*np.sign(alphas[i]))
-
         # Fam[i,:] = (Fam_magnitude[i] * z_wing_w_sequence[i]*np.sign(alphas[i]))
         # Fam[i, :] = np.matmul(bodyRotationMatrixTrans_sequence[i], np.matmul(strokeRotationMatrixTrans_sequence[i], np.matmul(wingRotationMatrixTrans_sequence[i], Fam[i])))
+        # e_Fam[i, :] = (Fam[i]/Fam_magnitude[i])
     
     # writeArraytoFile(Fam_magnitude, 'debug/F_am_w_mag.txt')
     # writeArraytoFile(Fam_magnitude1, 'debug/Fam_mag1.txt')
