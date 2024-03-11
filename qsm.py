@@ -563,7 +563,7 @@ import time
 #cost function which tells us how far off our QSM values are from the CFD ones
 def cost(x, numerical=False, nb=1000, show_plots=False):
     #global variable must be imported in order to modify them locally
-    global Fl_magnitude, Fd_magnitude, Frot_magnitude, Fam_magnitude, planar_rots_wing_g, y_wing_g_sequence, Fam
+    global Fl_magnitude, Fd_magnitude, Frot_magnitude, Fam_magnitude, planar_rots_wing_g, y_wing_g_sequence, Fam, AoA
 
     Cl, Cd, Crot, Cam1, Cam2, Cam3 = getAerodynamicCoefficients(x, np.array(AoA))
 
@@ -581,11 +581,12 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
     #with their corresponding vectors. to fix this, we reshape Cl and Cd to be of shape (nt,)
     Cl = Cl.reshape(nt,) 
     Cd = Cd.reshape(nt,)
+    AoA = AoA.reshape(nt,)
+
     _planar_rots_wing_g = planar_rots_wing_g.reshape(nt,3)
     _planar_rots_wing_w = planar_rots_wing_w.reshape(nt,3)
     _planar_rot_acc_wing_g = planar_rot_acc_wing_g.reshape(nt,3)
     _planar_rot_acc_wing_w = planar_rot_acc_wing_w.reshape(nt,3) 
-    _alphas_dt_dt_sequence = alphas_dt_dt_sequence
 
     if numerical:
         #START OF NUMERICAL VERSION
@@ -616,13 +617,14 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fl_magnitude += 0.5*rho*Cl*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Fd_magnitude += 0.5*rho*Cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr
             Frot_magnitude += rho*Crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr
-            Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2])*r*c[i]**2*dr + Cam2*rho*np.pi/4*(alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam3*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
-
+            # Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2])*r*c[i]**2*dr + Cam2*rho*np.pi/4*(alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam3*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr #following Nakata et al. 2015
+            Fam_magnitude += Cam1*rho*phis_dt_dt_sequence*r*c[i]**2*dr*np.cos(alphas) + Cam2*rho*phis_dt_dt_sequence*r*c[i]**2*dr*np.sin(alphas) #following van Veen et al. 2022 #with Cam1 = CFam,x and Cam2 = CFam,z
             # Fam_magnitude += Cam1*_planar_rot_acc_wing_w[:, 2] + Cam2*alphas_dt_sequence*_planar_rots_wing_w[:, 0] + Cam3*alphas_dt_dt_sequence
+        # Fam_magnitude += Cam1*np.linalg.norm(_planar_rot_acc_wing_w, axis=1)
             # Fam_magnitude += Cam1*rho*np.pi/4*(_planar_rot_acc_wing_w[:, 2] + alphas_dt_sequence*_planar_rots_wing_w[:, 0])*r*c[i]**2*dr + Cam2*rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
             # Fam_magnitude += rho*np.pi/4*(_planar_rot_acc_wing_g[:, 2] + alphas_dt_sequence*_planar_rots_wing_g[:, 0])*r*c[i]**2*dr + rho*np.pi/16*_alphas_dt_dt_sequence*c[i]**3*dr
         #END OF NUMERICAL VERSION   
-                    
+                     
     else: 
         #START OF ANALYTICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -659,7 +661,6 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         # Fam[i,:] = (Fam_magnitude[i] * z_wing_w_sequence[i]*np.sign(alphas[i]))
         # Fam[i, :] = np.matmul(bodyRotationMatrixTrans_sequence[i], np.matmul(strokeRotationMatrixTrans_sequence[i], np.matmul(wingRotationMatrixTrans_sequence[i], Fam[i])))
         # e_Fam[i, :] = (Fam[i]/Fam_magnitude[i])
-    
     # writeArraytoFile(Fam_magnitude, 'debug/F_am_w_mag.txt')
     # writeArraytoFile(Fam_magnitude1, 'debug/Fam_mag1.txt')
     # writeArraytoFile(Fam_magnitude2, 'debug/Fam_mag2.txt')
@@ -733,7 +734,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
 
         #vertical forces
         # plt.plot(timeline, Fl[:, 2], label = 'Vertical lift force', color='gold')
-        plt.plot(timeline, Frot[:, 2], label = 'Vertical rotational force', color='orange')
+        # plt.plot(timeline, Frot[:, 2], label = 'Vertical rotational force', color='orange')
         # plt.plot(timeline, Fd[:, 2], label = 'Vertical drag force', color='lightgreen')
         plt.plot(timeline, Fam[:, 2], label = 'Vertical added mass force', color='red')
         plt.plot(timeline, Fz_QSM, label = 'Vertical QSM force', color='blue')
