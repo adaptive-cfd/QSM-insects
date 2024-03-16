@@ -664,7 +664,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
             Fd_magnitude += 0.5*rho*Cd*(blade_planar_us_wing_g_magnitude**2)*c[i]*dr ##Nakata et al. 2015
             Frot_magnitude += rho*Crot*blade_planar_us_wing_g_magnitude*alphas_dt_sequence*(c[i]**2)*dr #Nakata et al. 2015
             Fam_magnitude += Cam1*blade_acc_wing_w[:, 2] + Cam2*_rots_wing_w[:, 1] #Cai et al. 2021
-            Frd_magnitude += Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
+            # Frd_magnitude += Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
 
             # #Computation of forces magnitudes by absorbing all terms related to wing shape, fluid density and force coefficients into the 'new' force coefficients 
             # Fl_magnitude += Cl*(blade_planar_us_wing_g_magnitude**2)
@@ -708,7 +708,7 @@ def cost(x, numerical=False, nb=1000, show_plots=False):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
         Frot[i,:] = (Frot_magnitude[i] * z_wing_g_sequence[i])
-        Fam[i, :] = (Fam_magnitude[i] * -z_wing_g_sequence[i])
+        Fam[i, :] = (Fam_magnitude[i] * z_wing_g_sequence[i])
         # Frd[i, :] = (Frd_magnitude[i] * y_wing_g_sequence[i])
         # Fam[i,:] = (Fam_magnitude[i] * z_wing_w_sequence[i]*np.sign(alphas[i]))
         # Fam[i, :] = np.matmul(bodyRotationMatrixTrans_sequence[i], np.matmul(strokeRotationMatrixTrans_sequence[i], np.matmul(wingRotationMatrixTrans_sequence[i], Fam[i])))

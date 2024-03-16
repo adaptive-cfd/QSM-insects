@@ -16,6 +16,47 @@ class bcolors:
         ENDC = '\033[0m'
         BOLD = '\033[1m'
         UNDERLINE = '\033[4m'
+        
+        
+def find_WABBIT_main_inifile(run_directory='./'):
+    """
+    find_WABBIT_main_inifile: In a folder, there are usually several INI files,
+    one of which describes the simulation (this is the main one) and others (wing shape, etc).
+    This routine figures out the main INI file in a folder.
+
+    Parameters
+    ----------
+    run_directory : string
+        Path of the simulation
+
+    Raises
+    ------
+    ValueError
+        If none is found, error is raised.
+
+    Returns
+    -------
+    inifile : TYPE
+        If found, this is the main INI file.
+
+    """
+    import glob
+    
+    found_main_inifile = False
+    for inifile in glob.glob( run_directory+"/*.ini" ):
+        section1 = exists_ini_section(inifile, 'Blocks')
+        section2 = exists_ini_section(inifile, 'Insects')
+        
+        # if we find both sections, we likely found the INI file
+        if section1 and section2:
+            found_main_inifile = True
+            print('Found simulations main INI file: '+inifile)
+            return inifile
+        
+    if not found_main_inifile:
+        raise ValueError("Did not find simulations main INI file - unable to proceed")
+        
+        
 
 def warn( msg ):
     print( bcolors.WARNING + "WARNING! " + bcolors.ENDC + msg)
@@ -87,7 +128,7 @@ def check_parameters_for_stupid_errors( file ):
         g_default = 1
         
     jmax            = get_ini_parameter(file, 'Blocks', 'max_treelevel', int)
-    jmin            = get_ini_parameter(file, 'Blocks', 'min_treelevel', int)
+    jmin            = get_ini_parameter(file, 'Blocks', 'min_treelevel', int, default=1)
     adapt_mesh      = get_ini_parameter(file, 'Blocks', 'adapt_tree', int, default=1)
     ceps            = get_ini_parameter(file, 'Blocks', 'eps')
     bs              = get_ini_parameter(file, 'Blocks', 'number_block_nodes', int, vector=True)
@@ -141,6 +182,12 @@ def check_parameters_for_stupid_errors( file ):
     
     print("dt_CFL= %2.3e" % (CFL*dx/c0))
     print("filter_type= %s filter_freq=%i" % (filter_type, filter_freq))
+    
+    if geometry == "Insect":
+        h_wing = get_ini_parameter( file, 'Insects', 'WingThickness', float, 0.0)
+        print('--- insect ----')
+        print('h_wing/dx = %2.2f' % (h_wing/dx))
+    
     print("======================================================================================")
     
     
@@ -528,6 +575,76 @@ def exists_ini_section( inifile, section ):
 
     return found_section
 
+
+def replace_ini_value(file, section, keyword, new_value):
+    """
+    replace ini value: Sets a value in an INI file. Useful for scripting of preprocessing
+    
+
+    Parameters
+    ----------
+    file : string
+        The INI file
+    section : string
+        Parameter file section.
+    keyword : string
+        Actual parameter to set/change.
+    new_value : string
+        The new value. Note we use strings here but WABBIT/FLUSI may interpret the value as number
+
+    Returns
+    -------
+    None.
+
+    """
+    found_section, found_keyword = False, False
+    i = 0
+
+
+    with open(file, 'r') as f:
+        # read a list of lines into data
+        data = f.readlines()
+       
+        
+
+    # loop over all lines
+    for line in data:
+        line = line.lstrip().rstrip()
+        if len(line) > 0:
+            if line[0] != ';':
+                if '['+section+']' in line:
+                    found_section = True
+                    
+                if ';' in line:
+                    line_nocomments = line[0:line.index(';')]
+                else:
+                    line_nocomments = ""
+                
+                    
+                if '[' in line_nocomments and ']' in line_nocomments and not '['+section+']' in line_nocomments and found_section:
+                    # left section again
+                    found_section = False         
+                    break
+                    
+                if keyword+'=' in line and found_section:
+                    # found keyword in section
+                    found_keyword = True
+                    old_value = line[ line.index(keyword+"="):line.index(";") ]
+     
+                    line = line.replace(old_value, keyword+'='+new_value)
+                    data[i] = line+'\n'
+                    
+                    print("changed: "+old_value+" to: "+keyword+'='+new_value)
+                    break
+        i += 1
+       
+                    
+    if found_keyword:
+        # .... and write everything back
+        with open(file, 'w') as f:
+            f.writelines( data )
+
+
 #
 def prepare_resuming_backup( inifile ):
     """ we look for the latest *.h5 files
@@ -828,13 +945,13 @@ def write_wabbit_hdf5( file, time, x0, dx, box, data, treecode, iteration = 0, d
     fid.create_dataset( 'coords_origin', data=x0, dtype=dtype )
     fid.create_dataset( 'coords_spacing', data=dx, dtype=dtype )
     fid.create_dataset( 'blocks', data=data, dtype=dtype )
-    fid.create_dataset( 'block_treecode', data=treecode, dtype=dtype )
+    fid.create_dataset( 'block_treecode', data=treecode, dtype=int )
 
     fid.close()
 
     fid = h5py.File(file,'a')
     dset_id = fid.get( 'blocks' )
-    dset_id.attrs.create( "version", 20200902) # this is used to distinguish wabbit file formats
+    dset_id.attrs.create( "version", 20231602) # this is used to distinguish wabbit file formats
     dset_id.attrs.create('time', time, dtype=dtype)
     dset_id.attrs.create('iteration', iteration)
     dset_id.attrs.create('domain-size', box, dtype=dtype )
@@ -986,11 +1103,12 @@ def plot_wabbit_dir(d, **kwargs):
 
 # given a treecode tc, return its level
 def treecode_level( tc ):
-    for j in range(len(tc)):
-            if (tc[j]==-1):
-                break
-
-    level = j - 1 + 1 # note one-based level indexing.
+    level = 0
+    for k in range(len(tc)):        
+        if (tc[k] >= 0):
+            level += 1
+        else:
+            break
     return(level)
 
 
@@ -1002,8 +1120,9 @@ def get_max_min_level( treecode ):
     max_level = -99
     N = treecode.shape[0]
     for i in range(N):
-        tc = treecode[i,:].copy()
+        tc = np.asarray( treecode[i,:].copy(), dtype=int)
         level = treecode_level(tc)
+
         min_level = min([min_level,level])
         max_level = max([max_level,level])
 
@@ -1067,7 +1186,10 @@ def plot_wabbit_file( file, savepng=False, savepdf=False, cmap='rainbow', caxis=
                      colorbar=True, dpi=300, block_edge_color='k',
                      block_edge_alpha=1.0, shading='auto',
                      colorbar_orientation="vertical",
-                     gridonly_coloring='mpirank', flipud=False, fileContainsGhostNodes=False):
+                     gridonly_coloring='mpirank', flipud=False, 
+                     fileContainsGhostNodes=False, 
+                     filename_png=None,
+                     filename_pdf=None):
     """
     Read and plot a 2D wabbit file. Not suitable for 3D data, use Paraview for that.
     
@@ -1087,7 +1209,13 @@ def plot_wabbit_file( file, savepng=False, savepdf=False, cmap='rainbow', caxis=
     import matplotlib.patches as patches
     import matplotlib.pyplot as plt
     import h5py
+    
+    if filename_pdf is None:
+        filename_pdf = file.replace('h5','pdf')
+    if filename_png is None:
+        filename_png = file.replace('h5','png')
 
+    
     cb = []
     # read procs table, if we want to draw the grid only
     if gridonly:
@@ -1278,7 +1406,9 @@ def plot_wabbit_file( file, savepng=False, savepdf=False, cmap='rainbow', caxis=
             cb = plt.colorbar(h[0], ax=ax, orientation=colorbar_orientation)
 
     if title:
-        plt.title( "t=%f Nb=%i Bs=(%i,%i)" % (time,N,Bs[1],Bs[0]) )
+        # note Bs in the file and Bs in wabbit are different (uniqueGrid vs redundantGrid
+        # definition)
+        plt.title( "t=%f Nb=%i Bs=(%i,%i)" % (time,N,Bs[1]-1,Bs[0]-1) )
 
 
     if not ticks:
@@ -1307,10 +1437,10 @@ def plot_wabbit_file( file, savepng=False, savepdf=False, cmap='rainbow', caxis=
 
     if not gridonly:
         if savepng:
-            plt.savefig( file.replace('h5','png'), dpi=dpi, transparent=True, bbox_inches='tight' )
+            plt.savefig( filename_png, dpi=dpi, transparent=True, bbox_inches='tight' )
 
         if savepdf:
-            plt.savefig( file.replace('h5','pdf'), bbox_inches='tight', dpi=dpi )
+            plt.savefig( filename_pdf, bbox_inches='tight', dpi=dpi )
     else:
         if savepng:
             plt.savefig( file.replace('.h5','-grid.png'), dpi=dpi, transparent=True, bbox_inches='tight' )
@@ -1447,8 +1577,8 @@ def wabbit_error_vs_wabbit(fname_ref_list, fname_dat_list, norm=2, dim=2):
         time1, x01, dx1, box1, data1, treecode1 = read_wabbit_hdf5( fname_ref )
         time2, x02, dx2, box2, data2, treecode2 = read_wabbit_hdf5( fname_dat )
     
-        data1, box1 = dense_matrix( x01, dx1, data1, treecode1, 2 )
-        data2, box2 = dense_matrix( x02, dx2, data2, treecode2, 2 )
+        data1, box1 = dense_matrix( x01, dx1, data1, treecode1, dim )
+        data2, box2 = dense_matrix( x02, dx2, data2, treecode2, dim )
         
         if (len(data1) != len(data2)) or (np.linalg.norm(box1-box2)>1e-15):
            raise ValueError("ERROR! Both fields are not a the same resolution")
@@ -1607,7 +1737,7 @@ def dense_matrix(  x0, dx, data, treecode, dim=2, verbose=True, new_format=False
 
 
         # domain size
-        box = [ddx[0]*nx[0], ddx[1]*nx[1], ddx[2]*nx[2]]
+        box = np.asarray([ddx[0]*nx[0], ddx[1]*nx[1], ddx[2]*nx[2]])
 
         for i in range(N):
             # get starting index of block
@@ -1710,7 +1840,7 @@ def flusi_to_wabbit_dir(dir_flusi, dir_wabbit , *args, **kwargs ):
     files.sort()
     for file in files:
 
-        fname_wabbit = dir_wabbit + "/" + re.split("_\d+.h5",os.path.basename(file))[0]
+        fname_wabbit = dir_wabbit + "/" + re.split("_\\d+.h5",os.path.basename(file))[0]
 
         flusi_to_wabbit(file, fname_wabbit ,  *args, **kwargs )
 
@@ -1782,7 +1912,7 @@ def dense_to_wabbit_hdf5(ddata, name , Bs, box_size = None, time = 0, iteration 
 
     if (type(Bs) is int):
         Bs = [Bs]*Ndim
-        
+           
     # 2) check if number of lattice points is block decomposable
     # loop over all dimensions
     for d in range(Ndim):
@@ -1801,7 +1931,7 @@ def dense_to_wabbit_hdf5(ddata, name , Bs, box_size = None, time = 0, iteration 
     #########################################################
 
     # assume periodicity:
-    data = np.zeros(Nsize+1,dtype=dtype)
+    data = np.zeros(Nsize+1, dtype=dtype)
     if Ndim == 2:
         data[:-1, :-1] = ddata
         # copy first row and column for periodicity
@@ -1831,27 +1961,30 @@ def dense_to_wabbit_hdf5(ddata, name , Bs, box_size = None, time = 0, iteration 
                     x0.append([ibx, iby, ibz]*Lintervals)
                     dx.append(Lintervals/(Bs-1))
 
-                    lower = [ibx, iby, ibz]* (Bs - 1)
+                    # lower = [ibx, iby, ibz]* (Bs - 1)
+                    lower = [ibx, iby, ibz]* (Bs-1)
                     lower = np.asarray(lower, dtype=int)
                     upper = lower + Bs
 
                     treecode.append(blockindex2treecode([ibx, iby, ibz], 3, level))
-                    bdata.append(data[lower[0]:upper[0], lower[1]:upper[1], lower[2]:upper[2]])
+                    bdata.append( data[lower[0]:upper[0], lower[1]:upper[1], lower[2]:upper[2]] )
     else:
         for ibx in range(Nintervals[0]):
             for iby in range(Nintervals[1]):
                 x0.append([ibx, iby]*Lintervals)
                 dx.append(Lintervals/(Bs-1))
+                
                 lower = [ibx, iby]* (Bs - 1)
                 lower = np.asarray(lower, dtype=int)
                 upper = lower + Bs
+                
                 treecode.append(blockindex2treecode([ibx, iby], 2, level))
-                bdata.append(data[lower[0]:upper[0], lower[1]:upper[1]])
+                bdata.append( data[lower[0]:upper[0], lower[1]:upper[1]] )
 
 
-    x0 = np.asarray(x0,dtype=dtype)
-    dx = np.asarray(dx,dtype=dtype)
-    treecode = np.asarray(treecode, dtype=dtype)
+    x0 = np.asarray(x0, dtype=dtype)
+    dx = np.asarray(dx, dtype=dtype)
+    treecode   = np.asarray(treecode, dtype=int)
     block_data = np.asarray(bdata, dtype=dtype)
 
     write_wabbit_hdf5(fname, time, x0, dx, box, block_data, treecode, iteration, dtype )
@@ -1879,6 +2012,9 @@ def field_shape_to_bs(Nshape, level):
             
     # Note we have to flip  n here because Bs = [BsX, BsY]
     # The order of Bs is choosen like it is in WABBIT.
+    # NB: while this definition is the one from a redundant grid,
+    # it is used the same in the uniqueGrid ! The funny thing is that in the latter
+    # case, we store the 1st ghost node to the H5 file - this is required for visualization.
     return n[::-1]//2**level + 1
 
 

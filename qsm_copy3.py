@@ -149,8 +149,6 @@ Mz_CFD = moments_CFD[:, 3]
 # My_CFD = -My_CFD
 
 # if isLeft == False: 
-#     Fy_CFD = -Fy_CFD
-#     My_CFD = -My_CFD
 #     print('The data correspond to the right wing. They will be adjusted to follow the left wing convention in this code.')
 # else: 
 #     print('The data correspond to the left wing')
