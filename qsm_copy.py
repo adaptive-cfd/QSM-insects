@@ -66,7 +66,7 @@ max_y = np.max(e_wingPoints[:, 1])
 e_R = max_y - min_y #e_R = 1
 
 #load kinematics data by means of eval_angles_kinematics_file function from insect_tools library 
-timeline, phis, alphas, thetas = it.eval_angles_kinematics_file(fname=kinematics_file, time=np.linspace(0.0, 1.0, 101))
+timeline, phis, alphas, thetas = it.eval_angles_kinematics_file(fname=kinematics_file, time=np.linspace(0.0, 1.0, 101)[:-1])
 phis = np.radians(phis)
 alphas = np.radians(alphas)
 thetas = np.radians(thetas)
@@ -113,7 +113,7 @@ z_wing_g_sequence = np.zeros((nt, 3))
 
 delta_t = timeline[1] - timeline[0]
 
-forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
+forces_CFD = it.load_t_file('phi120.00_phim20.00_dTau0.05/forces_rightwing.t', T0=[1.0, 2.0])
 t = forces_CFD[:, 0]-1.0
 Fx_CFD = forces_CFD[:, 1]
 Fy_CFD = forces_CFD[:, 2]
@@ -287,9 +287,13 @@ def generateSequence (start_time=0, number_of_timesteps=360, frequency=1, useCFD
         # thetas_dt = thetas_dt_interp(t)
 
         #here the time derivatives of the angles are calculated by means of 1st order approximations
-        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep]) / delta_t #here we compute the modulus of (timestep+1) and nt to prevent overflowing.  
-        phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / delta_t
-        thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / delta_t
+        # alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep]) / delta_t #here we compute the modulus of (timestep+1) and nt to prevent overflowing.  
+        # phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / delta_t
+        # thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / delta_t
+
+        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep-1]) / (2*delta_t) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
+        phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
+        thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep-1]) / (2*delta_t)
 
         alphas_dt_sequence[timeStep] = alphas_dt
         phis_dt_sequence[timeStep] = phis_dt
@@ -535,7 +539,6 @@ def cost(x, numerical=False, nb=100, show_plots=False):
         # writeArraytoFile(Fd_magnitude, 'debug/' + str(nb) + '_Fd_magnitude_n.txt')
         # writeArraytoFile(Frot_magnitude, 'debug/' + str(nb) + '_Frot_magnitude_n.txt')
         #END OF NUMERICAL VERSION 
-
     else: 
         #START OF ANALYTICAL VERSION
         #computation following Nakata 2015 eqns. 2.4a-c
@@ -566,6 +569,10 @@ def cost(x, numerical=False, nb=100, show_plots=False):
         # writeArraytoFile(Frot_magnitude,'debug/' + str(nb) + '_Frot_magnitude_a.txt')
         #END OF ANALYTICAL VERSION 
     # vector calculation of Fl, Fd, Frot. arrays of the form (nt, 3) 
+    writeArraytoFile(blade_planar_us_wing_g_magnitude, 'debug/bladecopy.txt')
+    writeArraytoFile(alphas_dt_sequence, 'debug/alphasdtcopy.txt')
+    writeArraytoFile(y_wing_g_sequence, 'debug/ywinggcopy.txt')
+    exit()
     for i in range(nt):
         Fl[i,:] = (Fl_magnitude[i] * e_liftVectors[i])
         Fd[i,:] = (Fd_magnitude[i] * e_dragVectors_wing_g[i])
