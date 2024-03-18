@@ -151,9 +151,9 @@ Mz_CFD = moments_CFD[:, 3]
 # My_CFD = -My_CFD
 
 if isLeft == 0: 
-    print('The data correspond to the right wing.')
+    print('The parsed data correspond to the right wing.')
 else: 
-    print('The data correspond to the left wing.')
+    print('The parsed data correspond to the left wing.')
 
 if np.round(forces_CFD[-1, 0],3) != time_max: 
     raise ValueError('CFD cycle number does not match that the actual run. Check your PARAMS, forces and moments files\n')
@@ -207,7 +207,7 @@ def getChordLength(wingPoints, y_coordinate):
 #by convention in this code we derotate as we start out with wing points and they must be converted down to global points. 
 #this function returns the converted points as well as the rotation matrix and its tranpose 
 
-def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, invert=False):
+def convert_from_wing_reference_frame_to_stroke_plane(points, parameters):
     #points passed into this fxn must be in the wing reference frame x(w) y(w) z(w)
     #phi, alpha, theta
     phi = parameters[4] #rad
@@ -230,7 +230,7 @@ def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, invert
         strokePoints[point, :] = x_s
     return strokePoints, rotationMatrix, rotationMatrixTrans
 
-def convert_from_stroke_plane_to_body_reference_frame(points, parameters, invert=False):
+def convert_from_stroke_plane_to_body_reference_frame(points, parameters):
     #points must be in stroke plane x(s) y(s) z(s)
     eta = parameters[3] #rad
     flip_angle = 0 
@@ -877,7 +877,7 @@ def main():
 # import io
 # profile = cProfile.Profile()
 # profile.enable()
-main()
+# main()
 # profile.disable()
 # s = io.StringIO()
 # ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
