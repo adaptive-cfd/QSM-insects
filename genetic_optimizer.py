@@ -1,9 +1,9 @@
 import pygad
 import numpy as np
-from qsm import cost, kinematics
+from qsm_num_ana import cost, kinematics
 import time
 
-kinematics()
+# kinematics()
 
 #global variables
 function_inputs = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1]
