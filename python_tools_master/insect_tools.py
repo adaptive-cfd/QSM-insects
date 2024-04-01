@@ -1373,8 +1373,6 @@ def make_white_plot( ax ):
     ax.tick_params( which='both', direction='in', top=True, right=True, color='w' )
 
 
-
-
 def insectSimulation_postProcessing( run_directory='./', output_filename='data_wingsystem.csv', plot=True, filename_plot='forcesMoments_wingSystem.pdf' ):
     """ 
     Post-Processes an existing insect simulation done with WABBIT.
@@ -1443,9 +1441,10 @@ def insectSimulation_postProcessing( run_directory='./', output_filename='data_w
 
     data_new = np.zeros( [k.shape[0], 13] )
     
+    
     for it in range(k.shape[0]):
         data_new[it, 0] = time[it]
-        
+
         #--- body rotation matrix
         M_body = Rx(psi[it])*Ry(beta[it])*Rz(gamma[it])
         
@@ -1471,7 +1470,6 @@ def insectSimulation_postProcessing( run_directory='./', output_filename='data_w
         data_new[it,1+6], data_new[it,2+6], data_new[it,3+6] = F[0], F[1], F[2]
         data_new[it,4+6], data_new[it,5+6], data_new[it,6+6] = M[0], M[1], M[2]
 
-
     #--- save output to CSV file
     if not output_filename is None:
         fid = open( output_filename, 'w' ) #open file, erase existing
@@ -1482,42 +1480,42 @@ def insectSimulation_postProcessing( run_directory='./', output_filename='data_w
         fid.close()
     
     
-    #--- create and save a plot
-    if plot:
-        d = data_new
-        import matplotlib.pyplot as plt    
+    # #--- create and save a plot
+    # if plot:
+    #     d = data_new
+    #     import matplotlib.pyplot as plt    
         
-        plt.figure()
-        plt.subplot(2,2,2)
-        plt.plot(d[:,0], d[:,1], label='$F_{R,x}^{(w)}$')
-        plt.plot(d[:,0], d[:,2], label='$F_{R,y}^{(w)}$')
-        plt.plot(d[:,0], d[:,3], label='$F_{R,z}^{(w)}$')
-        indicate_strokes()
-        plt.legend()
+    #     plt.figure()
+    #     plt.subplot(2,2,2)
+    #     plt.plot(d[:,0], d[:,1], label='$F_{R,x}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,2], label='$F_{R,y}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,3], label='$F_{R,z}^{(w)}$')
+    #     indicate_strokes()
+    #     plt.legend()
         
-        plt.subplot(2,2,4)
-        plt.plot(d[:,0], d[:,4], label='$M_{R,x}^{(w)}$')
-        plt.plot(d[:,0], d[:,5], label='$M_{R,y}^{(w)}$')
-        plt.plot(d[:,0], d[:,6], label='$M_{R,z}^{(w)}$')
-        indicate_strokes()
-        plt.legend()
+    #     plt.subplot(2,2,4)
+    #     plt.plot(d[:,0], d[:,4], label='$M_{R,x}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,5], label='$M_{R,y}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,6], label='$M_{R,z}^{(w)}$')
+    #     indicate_strokes()
+    #     plt.legend()
         
-        plt.subplot(2,2,1)
-        plt.plot(d[:,0], d[:,7], label='$F_{L,x}^{(w)}$')
-        plt.plot(d[:,0], d[:,8], label='$F_{L,y}^{(w)}$')
-        plt.plot(d[:,0], d[:,9], label='$F_{L,z}^{(w)}$')
-        indicate_strokes()
-        plt.legend()
+    #     plt.subplot(2,2,1)
+    #     plt.plot(d[:,0], d[:,7], label='$F_{L,x}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,8], label='$F_{L,y}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,9], label='$F_{L,z}^{(w)}$')
+    #     indicate_strokes()
+    #     plt.legend()
         
-        plt.subplot(2,2,3)
-        plt.plot(d[:,0], d[:,10], label='$M_{L,x}^{(w)}$')
-        plt.plot(d[:,0], d[:,11], label='$M_{L,y}^{(w)}$')
-        plt.plot(d[:,0], d[:,12], label='$M_{L,z}^{(w)}$')
-        indicate_strokes()
-        plt.legend()
-        plt.gcf().set_size_inches([10,10])
-        plt.tight_layout()
-        plt.savefig( run_directory+filename_plot)
+    #     plt.subplot(2,2,3)
+    #     plt.plot(d[:,0], d[:,10], label='$M_{L,x}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,11], label='$M_{L,y}^{(w)}$')
+    #     plt.plot(d[:,0], d[:,12], label='$M_{L,z}^{(w)}$')
+    #     indicate_strokes()
+    #     plt.legend()
+    #     plt.gcf().set_size_inches([10,10])
+    #     plt.tight_layout()
+    #     plt.savefig( run_directory+filename_plot)
     return data_new
 
 def read_flusi_HDF5( fname, dtype=np.float64):
