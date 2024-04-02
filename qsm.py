@@ -26,7 +26,7 @@ today_filename =now.strftime(" %d-%m-%Y %I:%M:%S")+".png"
 #global variables:
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-cfd_run = 'phi120.00_phim20.00_dTau0.05'
+cfd_run = 'phi129.76_phim10.34_dTau0.00'
 isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
 wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'WingShape', dtype=str)
 if 'from_file' in wingShape:
@@ -71,11 +71,34 @@ alphas = np.radians(alphas)
 thetas = np.radians(thetas)
 
 #timeline reassignment. when the timeline from the function eval_angles_kinematics_file is used 
-#the last point of the timeline is the same as the first one (so timeline[0] = timeline[-1])
+#the last point of the timeline is the same as the first one (so value[0] = value[-1]) which creates a redundancy because 
+#in python value[-1] = value[last]. when calculating time derivatives this redundancy jumbles up the code
 #to solve this we can either do a variable reassigment or remove the last entry in timeline. the second method
 #leaves you with one less point in the array. the first method is preferred. 
 timeline = np.linspace(0, 1, timeline.shape[0])
 nt = timeline.shape[0] #number of timesteps
+
+# # load kinematics data by means of load_t_file function from insect_tools library 
+# kinematics_cfd = it.load_t_file(cfd_run+'/kinematics.t')
+# timeline = kinematics_cfd[:,0].flatten()
+# alphas_it = kinematics_cfd[:,11].flatten()
+# phis_it = kinematics_cfd[:,12].flatten()
+# thetas_it = kinematics_cfd[:,13].flatten()
+
+# #interpolate alpha, phi and theta  with respect to the original timeline
+# alphas_interp = interp1d(timeline.flatten(), alphas_it.flatten(), fill_value='extrapolate')
+# phis_interp = interp1d(timeline.flatten(), phis_it.flatten(), fill_value='extrapolate')
+# thetas_interp = interp1d(timeline.flatten(), thetas_it.flatten(), fill_value='extrapolate')
+
+# #timeline downsizing 
+# timeline = np.linspace(0, 1, 101)
+
+# alphas = alphas_interp(timeline)[:-1]
+# phis = phis_interp(timeline)[:-1]
+# thetas = thetas_interp(timeline)[:-1]
+
+# timeline = np.linspace(0, 1, 100)
+# nt = timeline.shape[0] #number of timesteps
 
 #here all of the required variable arrays are created to match the size of the timeline 
 #since for every timestep each variable must be computed. this will happen in 'generateSequence'  
@@ -452,10 +475,6 @@ def generatePlotsForKinematicsSequence():
 
 #kinematics
 for timeStep in range(nt):
-    # alphas_dt = alphas_dt_interp(t)
-    # phis_dt = phis_dt_interp(t)
-    # thetas_dt = thetas_dt_interp(t)
-
     #here the 1st time derivatives of the angles are calculated by means of 2nd order central difference approximations
     alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep-1]) / (2*delta_t) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
     phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
@@ -637,7 +656,7 @@ def getAerodynamicCoefficients(x0, AoA):
 #     Fz_CFD_w_vector[i, :] = F_CFD_w[i, :]
 #     Fz_CFD_w_vector[i, 0:2] = 0
 
-# data_new = it.insectSimulation_postProcessing('phi120.00_phim20.00_dTau0.05/')
+# data_new = it.insectSimulation_postProcessing(cfd_run)
 # t_Mw = data_new[1961:3921, 0]-1
 # Mx_CFD_w = data_new[1961:3921, 4]
 # My_CFD_w = data_new[1961:3921, 5]
@@ -738,7 +757,7 @@ def cost(x, nb=1000, show_plots=False):
     Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
     Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
     Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
-    Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
+    # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
     # vector calculation of Ftc, Ftd, Frc, Fam. arrays of the form (nt, 3) 
     for i in range(nt):
@@ -809,7 +828,7 @@ def cost(x, nb=1000, show_plots=False):
         plt.ylabel('Force [mN]')
         plt.title(f'Fx_QSM/Fx_CFD = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 3)}; Fz_QSM/Fz_CFD = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
         plt.legend()
-        # plt.savefig('debug_images/forces; no Fwe; Ftc|Ftd|Frc_g, Fam_w; '+cfd_run+today_filename, dpi=300)
+        # plt.savefig('debug_images/forces; no Fwe; all _w; '+cfd_run+today_filename, dpi=300)
         plt.show()
 
         #vertical forces
