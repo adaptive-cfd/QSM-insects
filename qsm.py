@@ -26,7 +26,7 @@ today_filename =now.strftime(" %d-%m-%Y %I:%M:%S")+".png"
 #global variables:
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-cfd_run = 'phi129.76_phim10.34_dTau0.00'
+cfd_run = 'phi120.00_phim20.00_dTau0.05'
 isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
 wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'WingShape', dtype=str)
 if 'from_file' in wingShape:
@@ -64,41 +64,41 @@ min_y = np.min(e_wingPoints[:, 1])
 max_y = np.max(e_wingPoints[:, 1])
 e_R = max_y - min_y #e_R = 1
 
-#load kinematics data by means of eval_angles_kinematics_file function from insect_tools library 
-timeline, phis, alphas, thetas = it.eval_angles_kinematics_file(fname=kinematics_file, time=np.linspace(0.0, 1.0, 101)[:-1]) #time=np.linspace(0.0, 1.0, 101))
-phis = np.radians(phis)
-alphas = np.radians(alphas)
-thetas = np.radians(thetas)
+# #load kinematics data by means of eval_angles_kinematics_file function from insect_tools library 
+# timeline, phis, alphas, thetas = it.eval_angles_kinematics_file(fname=kinematics_file, time=np.linspace(0.0, 1.0, 101)[:-1]) #time=np.linspace(0.0, 1.0, 101))
+# phis = np.radians(phis)
+# alphas = np.radians(alphas)
+# thetas = np.radians(thetas)
 
-#timeline reassignment. when the timeline from the function eval_angles_kinematics_file is used 
-#the last point of the timeline is the same as the first one (so value[0] = value[-1]) which creates a redundancy because 
-#in python value[-1] = value[last]. when calculating time derivatives this redundancy jumbles up the code
-#to solve this we can either do a variable reassigment or remove the last entry in timeline. the second method
-#leaves you with one less point in the array. the first method is preferred. 
-timeline = np.linspace(0, 1, timeline.shape[0])
-nt = timeline.shape[0] #number of timesteps
-
-# # load kinematics data by means of load_t_file function from insect_tools library 
-# kinematics_cfd = it.load_t_file(cfd_run+'/kinematics.t')
-# timeline = kinematics_cfd[:,0].flatten()
-# alphas_it = kinematics_cfd[:,11].flatten()
-# phis_it = kinematics_cfd[:,12].flatten()
-# thetas_it = kinematics_cfd[:,13].flatten()
-
-# #interpolate alpha, phi and theta  with respect to the original timeline
-# alphas_interp = interp1d(timeline.flatten(), alphas_it.flatten(), fill_value='extrapolate')
-# phis_interp = interp1d(timeline.flatten(), phis_it.flatten(), fill_value='extrapolate')
-# thetas_interp = interp1d(timeline.flatten(), thetas_it.flatten(), fill_value='extrapolate')
-
-# #timeline downsizing 
-# timeline = np.linspace(0, 1, 101)
-
-# alphas = alphas_interp(timeline)[:-1]
-# phis = phis_interp(timeline)[:-1]
-# thetas = thetas_interp(timeline)[:-1]
-
-# timeline = np.linspace(0, 1, 100)
+# #timeline reassignment. when the timeline from the function eval_angles_kinematics_file is used 
+# #the last point of the timeline is the same as the first one (so value[0] = value[-1]) which creates a redundancy because 
+# #in python value[-1] = value[last]. when calculating time derivatives this redundancy jumbles up the code
+# #to solve this we can either do a variable reassigment or remove the last entry in timeline. the second method
+# #leaves you with one less point in the array. the first method is preferred. 
+# timeline = np.linspace(0, 1, timeline.shape[0])
 # nt = timeline.shape[0] #number of timesteps
+
+# load kinematics data by means of load_t_file function from insect_tools library 
+kinematics_cfd = it.load_t_file(cfd_run+'/kinematics.t')
+timeline = kinematics_cfd[:,0].flatten()
+alphas_it = kinematics_cfd[:,11].flatten()
+phis_it = kinematics_cfd[:,12].flatten()
+thetas_it = kinematics_cfd[:,13].flatten()
+
+#interpolate alpha, phi and theta  with respect to the original timeline
+alphas_interp = interp1d(timeline.flatten(), alphas_it.flatten(), fill_value='extrapolate')
+phis_interp = interp1d(timeline.flatten(), phis_it.flatten(), fill_value='extrapolate')
+thetas_interp = interp1d(timeline.flatten(), thetas_it.flatten(), fill_value='extrapolate')
+
+#timeline downsizing 
+timeline = np.linspace(0, 1, 101)
+
+alphas = alphas_interp(timeline)[:-1]
+phis = phis_interp(timeline)[:-1]
+thetas = thetas_interp(timeline)[:-1]
+
+timeline = np.linspace(0, 1, 100)
+nt = timeline.shape[0] #number of timesteps
 
 #here all of the required variable arrays are created to match the size of the timeline 
 #since for every timestep each variable must be computed. this will happen in 'generateSequence'  
