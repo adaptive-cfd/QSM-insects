@@ -378,18 +378,30 @@ def getAoA(x_wing_g, e_u_wing_g):
 #     AoA = np.arctan2(np.linalg.norm(np.cross(x_wing_g, e_u_wing_g)), np.dot(e_u_wing_g, x_wing_g.reshape(3,1))) #rad
 #     return AoA  
 
-def getLever(F, M): 
+# def getLever(F, M): 
+# #to find the lever we need to solve for r: M = r x F. however since no inverse of the cross product exists, we have to use the vector triple product
+# #what we get is: r = M x F/norm(F)^2 + t*F ; where * is the dot product and t is any constant. for this equation to be valid, F and M must be orthogonal to each other, 
+# #such that F*M = 0
+#     for i in range(nt): 
+#         F_norm = (np.linalg.norm(F, axis=1))
+#         if F_norm[i] != 0:
+#             lever[i, :] = np.cross(F[i, :], M[i, :])/F_norm[i]**2 + 0*F[i, :] #here I take t = 0
+#         else: 
+#             lever[i, :] = 0 
+#     return lever 
+
+def getLever(M, F): 
 #to find the lever we need to solve for r: M = r x F. however since no inverse of the cross product exists, we have to use the vector triple product
 #what we get is: r = M x F/norm(F)^2 + t*F ; where * is the dot product and t is any constant. for this equation to be valid, F and M must be orthogonal to each other, 
 #such that F*M = 0
     for i in range(nt): 
         F_norm = (np.linalg.norm(F, axis=1))
         if F_norm[i] != 0:
-            lever[i, :] = np.cross(F[i, :], M[i, :])/F_norm[i]**2 + 0*F[i, :] #here I take t = 0
+            lever[i, :] = np.cross(M[i, :], F[i, :])/F_norm[i]**2 + 0*F[i, :] #here I take t = 0
         else: 
             lever[i, :] = 0 
-    return lever 
-       
+    return lever
+
 def animationPlot(ax, timeStep):
     #get point set by timeStep number
     points = globalPointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
@@ -627,34 +639,15 @@ planar_rots_wing_g_magnitude = np.linalg.norm(planar_rots_wing_g, axis=1).reshap
 rots_wing_w_magnitude = np.linalg.norm(rots_wing_w, axis=1).reshape(nt,)
 planar_rots_wing_w_magnitude = np.linalg.norm(planar_rots_wing_w, axis=1).reshape(nt,)
 
-############################################################################################################################################################################################
-##% dynamics
-
-def getAerodynamicCoefficients(x0, AoA): 
-    deg2rad = np.pi/180.0 
-    rad2deg = 180.0/np.pi
-    
-    AoA = rad2deg*AoA
-    
-    # Cl and Cd definitions from Dickinson 1999
-    Cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
-    Cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
-    Crot = x0[4]
-    Cam1 = x0[5]
-    Cam2 = x0[6]
-    Crd = x0[7]
-    Cwe = x0[8]
-    return Cl, Cd, Crot, Cam1, Cam2, Crd, Cwe
-
-# #computation of M_CFD_w
-# for i in range(nt):
-#     M_CFD_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], M_CFD_g[i, :])
-#     # M_CFD_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], M_CFD_g[i, :])))
-#     Mx_CFD_w_vector[i, :] = M_CFD_w[i, :]
-#     Mx_CFD_w_vector[i, 1:3] = 0 
-#     F_CFD_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], F_CFD_g[i, :])
-#     Fz_CFD_w_vector[i, :] = F_CFD_w[i, :]
-#     Fz_CFD_w_vector[i, 0:2] = 0
+#computation of M_CFD_w
+for i in range(nt):
+    M_CFD_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], M_CFD_g[i, :])
+    # M_CFD_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], M_CFD_g[i, :])))
+    Mx_CFD_w_vector[i, :] = M_CFD_w[i, :]
+    Mx_CFD_w_vector[i, 1:3] = 0 
+    F_CFD_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], F_CFD_g[i, :])
+    Fz_CFD_w_vector[i, :] = F_CFD_w[i, :]
+    Fz_CFD_w_vector[i, 0:2] = 0
 
 # data_new = it.insectSimulation_postProcessing(cfd_run)
 # t_Mw = data_new[1961:3921, 0]-1
@@ -689,11 +682,27 @@ def getAerodynamicCoefficients(x0, AoA):
 # exit()
 
 ############################################################################################################################################################################################
-##%% main 
+##%% dynamics
 
 from scipy.integrate import trapz, simpson
 import scipy.optimize as opt
 import time
+
+def getAerodynamicCoefficients(x0, AoA): 
+    deg2rad = np.pi/180.0 
+    rad2deg = 180.0/np.pi
+    
+    AoA = rad2deg*AoA
+    
+    # Cl and Cd definitions from Dickinson 1999
+    Cl = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+    Cd = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+    Crot = x0[4]
+    Cam1 = x0[5]
+    Cam2 = x0[6]
+    Crd = x0[7]
+    Cwe = x0[8]
+    return Cl, Cd, Crot, Cam1, Cam2, Crd, Cwe
 
 #cost function which tells us how far off our QSM values are from the CFD ones
 def cost(x, nb=1000, show_plots=False):
@@ -749,7 +758,6 @@ def cost(x, nb=1000, show_plots=False):
     # Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
     # Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
     # #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
-    
 
     #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
     Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
@@ -792,7 +800,8 @@ def cost(x, nb=1000, show_plots=False):
     else:
         K = K_num
 
-    lever = getLever(Fz_QSM_w_vector, Mx_CFD_w_vector)
+    lever = getLever(Mx_CFD_w_vector, Fz_QSM_w_vector)
+
     if show_plots:
         # plt.plot(timeline, np.degrees(phis), label='ɸ')
         # plt.plot(timeline, np.degrees(alphas), label ='⍺')
@@ -854,6 +863,7 @@ def cost(x, nb=1000, show_plots=False):
         plt.ylabel('Force [mN]')
         plt.title('QSM force components in wing reference frame')
         plt.legend()
+        # plt.savefig('debug_images/QSM forces_w; '+cfd_run+today_filename, dpi=300)
         plt.show()
 
         # #qsm force components in global reference frame
@@ -865,25 +875,27 @@ def cost(x, nb=1000, show_plots=False):
         # plt.legend()
         # plt.show()
 
-        # #lever
-        # # plt.plot(timeline, lever[:, 0], color='#C00891', label='Lever x-component')
-        # # plt.plot(timeline, lever[:, 1], color='#0F2AEE', label='Lever y-component')
-        # # plt.plot(timeline, lever[:, 2], color='#0FEE8C', label='Lever z-component')
-        # plt.plot(timeline, np.linalg.norm(lever, axis=1), color='#08C046', label='Lever magnitude')
-        # plt.xlabel('t/T [s]')
-        # plt.ylabel('Lever [mm]')
-        # plt.legend()
-        # plt.show()
+        #cfd moments in wing reference frame 
+        plt.plot(timeline, M_CFD_w[:, 0], label='Mx_CFD_w', color='red')
+        plt.plot(timeline, M_CFD_w[:, 1], label='My_CFD_w', color='green')
+        plt.plot(timeline, M_CFD_w[:, 2], label='Mz_CFD_w',  color='blue')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Moment [mN*mm]')
+        plt.title('CFD moments in wing reference frame')
+        plt.legend()
+        # plt.savefig('debug_images/CFD moments_w; '+cfd_run+today_filename, dpi=300)
+        plt.show()  
 
-        # #cfd moments in wing reference frame 
-        # plt.plot(timeline, M_CFD_w[:, 0], label='Mx_CFD_w', color='red')
-        # plt.plot(timeline, M_CFD_w[:, 1], label='My_CFD_w', color='green')
-        # plt.plot(timeline, M_CFD_w[:, 2], label='Mz_CFD_w',  color='blue')
-        # plt.xlabel('t/T [s]')
-        # plt.ylabel('Moment [mN*mm]')
-        # plt.title('CFD moments in wing reference frame')
-        # plt.legend()
-        # plt.show()    
+        #lever
+        plt.plot(timeline, lever[:, 0], color='#C00891', label='Lever x-component')
+        plt.plot(timeline, lever[:, 1], color='#0F2AEE', label='Lever y-component')
+        plt.plot(timeline, lever[:, 2], color='#0FEE8C', label='Lever z-component')
+        # plt.plot(timeline, np.linalg.norm(lever, axis=1), color='#08C046', label='Lever magnitude')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Lever [mm]')
+        plt.legend()
+        # plt.savefig('debug_images/lever; '+cfd_run+today_filename, dpi=300)
+        plt.show()  
 
         # #cfd moments in wing reference frame (insect tools)
         # plt.plot(t_Mw, Mx_CFD_w, label='Mx_CFD_w', color='red')
@@ -920,7 +932,7 @@ def cost(x, nb=1000, show_plots=False):
 
 #optimizing using scipy.optimize.minimize which is faster
 def main():
-    x_0 =  [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1, 1] #[30, 63,  0.0001, -378, 8, 13, 23.76, 448.9, 98.12] #initial definition of x0 following Dickinson 1999
+    x_0 =  [0.03161,  0.03312,  0.07465, -0.04036,  0.0634,  -0.04163, -0.00789,  0.01615, 1.]  #[30, 63,  0.0001, -378, 8, 13, 23.76, 448.9, 98.12] #initial definition of x0 following Dickinson 1999
     bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
     optimize = True
     nb = 5000 #nb: number of blades 
@@ -966,6 +978,8 @@ def main():
 # profile = cProfile.Profile()
 # profile.enable()
 main()
+
+writeArraytoFile(lever, 'debug/lever.txt')
 # profile.disable()
 # s = io.StringIO()
 # ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
