@@ -166,7 +166,7 @@ bodyRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
 rotationMatrix_g_to_w = np.zeros((nt, 3, 3))
 rotationMatrix_w_to_g = np.zeros((nt, 3, 3))
 
-lever = np.zeros((nt, 3))
+lever = np.zeros((nt))
 
 delta_t = timeline[1] - timeline[0]
 
@@ -938,7 +938,7 @@ def force_optimization():
         K_final = ''
         print('Computing for: ' + str(nb) + ' blades')
         # cost_forces(x0_final, nb, show_plots=True)
-    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+    print('x0_final_forces:', np.round(x0_final, 5), '\nK_final_forces:', K_final)
     cost_forces(x0_final, show_plots=True)
 
 # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
@@ -980,11 +980,12 @@ def cost_moments(x, show_plots=False):
 
     C_lever = x[0]
     
-    lever = M_CFD_w[:, 0]/F_CFD_w[:, 2]
-
-    Mx_QSM_w_
+    lever[:] = M_CFD_w[:, 0]/F_CFD_w[:, 2]
     
+    Mx_QSM_w_no_optimizer = np.average(lever)*F_QSM_w[:, 2]
+
     Mx_QSM_w = C_lever*F_QSM_w[:, 2]
+
     # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
     K2_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) 
@@ -998,12 +999,13 @@ def cost_moments(x, show_plots=False):
     if show_plots:
         #cfd vs qsm x-component of moment 
         plt.figure()
-        plt.plot(timeline[:], , label='Mx_QSM_w', color='red')
+        plt.plot(timeline[:], Mx_QSM_w_no_optimizer[:],  label='Mx_QSM_w', color='red')
         plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
         plt.xlabel('t/T [s]')
         plt.ylabel('Moment [mN*mm]')
+        plt.title('Mx_QSM_w (without optimization) .vs. Mx_CFD_w ')
         plt.legend()
-        # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
+        # plt.savefig('debug_images/Mx_w QSM (no optimizer) vs CFD; '+cfd_run+rightnow, dpi=300)
         plt.show() 
 
         #cfd vs qsm x-component of moment 
@@ -1012,6 +1014,7 @@ def cost_moments(x, show_plots=False):
         plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
         plt.xlabel('t/T [s]')
         plt.ylabel('Moment [mN*mm]')
+        plt.title('Mx_QSM_w .vs. Mx_CFD_w ')
         plt.legend()
         # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
         plt.show() 
@@ -1027,7 +1030,7 @@ def cost_moments(x, show_plots=False):
         plt.ylabel('Lever [mm]')
         plt.legend()
         # plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
-        plt.show()  
+        plt.show()
 
         # #cfd moments in wing reference frame (insect tools)
         # plt.figure()
@@ -1073,10 +1076,6 @@ def cost_moments(x, show_plots=False):
         # plt.show()  
     return K2
 
-K2 = cost_moments([1.3], show_plots=True)
-# print(type(K2))
-# exit() 
-
 #moment optimization
 def moment_optimization():
     x_0_moments = [1.0]
@@ -1092,7 +1091,8 @@ def moment_optimization():
         x0_final = [1.0]
         K_final = ''
         # cost_moments(x0_final, show_plots=True)
-    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+    print('x0_final_moments:', np.round(x0_final, 5), '\nK_final_moments:', K_final)
     cost_moments(x0_final, show_plots=True)
 
 moment_optimization()
+print('Lever value before optimization, calculated from M_CFD_w[:, 0]/F_CFD_w[:, 2] :', np.average(lever))
