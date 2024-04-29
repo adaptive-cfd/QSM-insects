@@ -968,7 +968,7 @@ force_optimization()
 # with open('debug/profile.txt', 'w+') as f:
 #     f.write(s.getvalue())
 
-def cost_moments(x, nb=1000, show_plots=False):
+def cost_moments(x, show_plots=False):
     C_lever = x[0]
     
     lever = M_CFD_w[:, 0]/F_QSM_w[:, 2]
@@ -1049,26 +1049,30 @@ def cost_moments(x, nb=1000, show_plots=False):
         # plt.show()  
         return K2
 
-#moment optimization!
-def moment_optimization():
-    x_0_moments =  [1]
-    bounds = [(-6, 6)]
-    optimize = True
-    nb = 5000 #nb: number of blades 
-    if optimize:
-        start = time.time()
-        optimization = opt.minimize(cost_moments, args=(nb,), bounds=bounds, x0=x_0_moments)
-        x0_final = optimization.x
-        K_final = optimization.fun
-        print('Computing for: ' + str(nb) + ' blades')
-        print('Completed in:', round(time.time() - start, 4), 'seconds')
-    else:
-        x0_final = [1]
-        K_final = ''
-        print('Computing for: ' + str(nb) + ' blades')
-        # cost_moments(x0_final, nb, show_plots=True)
-    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
-    cost_forces(x0_final, show_plots=True)
+K2 = cost_moments([1], show_plots=True)
 
-moment_optimization()
+print(K2)
+
+# #moment optimization
+# def moment_optimization():
+#     x_0_moments =  [1]
+#     bounds = [(-6, 6)]
+#     optimize = True
+#     nb = 5000 #nb: number of blades 
+#     if optimize:
+#         start = time.time()
+#         optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
+#         x0_final = optimization.x
+#         K_final = optimization.fun
+#         print('Computing for: ' + str(nb) + ' blades')
+#         print('Completed in:', round(time.time() - start, 4), 'seconds')
+#     else:
+#         x0_final = [1]
+#         K_final = ''
+#         print('Computing for: ' + str(nb) + ' blades')
+#         # cost_moments(x0_final, nb, show_plots=True)
+#     print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+#     cost_forces(x0_final, show_plots=True)
+
+# moment_optimization()
 
