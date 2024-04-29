@@ -894,7 +894,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         plt.ylabel('Force [mN]')
         plt.title('QSM force components in wing reference frame')
         plt.legend()
-        # plt.savefig('debug_images/QSM forces_w; '+cfd_run+rightnow, dpi=300)
+        plt.savefig('debug_images/QSM forces_w; '+cfd_run+rightnow, dpi=300)
         plt.show()
 
         # #qsm force components in global reference frame
@@ -905,7 +905,6 @@ def cost_forces(x, nb=1000, show_plots=False):
         # plt.ylabel('Force [mN]')
         # plt.legend()
         # plt.show()
-
 
         generatePlotsForKinematicsSequence()
     return K
@@ -969,6 +968,8 @@ force_optimization()
 #     f.write(s.getvalue())
 
 def cost_moments(x, show_plots=False):
+    global M_CFD_w, F_QSM_w
+
     C_lever = x[0]
     
     lever = M_CFD_w[:, 0]/F_QSM_w[:, 2]
@@ -987,7 +988,6 @@ def cost_moments(x, show_plots=False):
         K2 = K2_num
 
     if show_plots:
-
         #cfd vs qsm x-component of moment 
         plt.plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
         plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
@@ -997,17 +997,17 @@ def cost_moments(x, show_plots=False):
         plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
         plt.show() 
 
-        # #lever
-        # # plt.plot(timeline, lever[:, 0], color='#C00891', label='Lever x-component')
-        # # plt.plot(timeline, lever[:, 1], color='#0F2AEE', label='Lever y-component')
-        # # plt.plot(timeline, lever[:, 2], color='#0FEE8C', label='Lever z-component')
-        # # plt.plot(timeline, np.linalg.norm(lever, axis=1), color='#08C046', label='Lever magnitude')
-        # plt.plot(timeline, lever)
-        # plt.xlabel('t/T [s]')
-        # plt.ylabel('Lever [mm]')
-        # plt.legend()
-        # # plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
-        # plt.show()  
+        #lever
+        # plt.plot(timeline, lever[:, 0], color='#C00891', label='Lever x-component')
+        # plt.plot(timeline, lever[:, 1], color='#0F2AEE', label='Lever y-component')
+        # plt.plot(timeline, lever[:, 2], color='#0FEE8C', label='Lever z-component')
+        # plt.plot(timeline, np.linalg.norm(lever, axis=1), color='#08C046', label='Lever magnitude')
+        plt.plot(timeline, lever)
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Lever [mm]')
+        plt.legend()
+        plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
+        plt.show()  
 
         # #cfd moments in wing reference frame (insect tools)
         # plt.plot(t_Mw, Mx_CFD_w, label='Mx_CFD_w', color='red')
@@ -1049,30 +1049,26 @@ def cost_moments(x, show_plots=False):
         # plt.show()  
         return K2
 
-K2 = cost_moments([1], show_plots=True)
+K2 = cost_moments([1.3], show_plots=True)
+# print(type(K2))
+# exit() 
 
-print(K2)
+#moment optimization
+def moment_optimization():
+    x_0_moments = [1.0]
+    bounds = [(-6, 6)]
+    optimize = True
+    if optimize:
+        start = time.time()
+        optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
+        x0_final = optimization.x
+        K_final = optimization.fun
+        print('Completed in:', round(time.time() - start, 4), 'seconds')
+    else:
+        x0_final = [1.0]
+        K_final = ''
+        # cost_moments(x0_final, show_plots=True)
+    print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
+    cost_moments(x0_final, show_plots=True)
 
-# #moment optimization
-# def moment_optimization():
-#     x_0_moments =  [1]
-#     bounds = [(-6, 6)]
-#     optimize = True
-#     nb = 5000 #nb: number of blades 
-#     if optimize:
-#         start = time.time()
-#         optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
-#         x0_final = optimization.x
-#         K_final = optimization.fun
-#         print('Computing for: ' + str(nb) + ' blades')
-#         print('Completed in:', round(time.time() - start, 4), 'seconds')
-#     else:
-#         x0_final = [1]
-#         K_final = ''
-#         print('Computing for: ' + str(nb) + ' blades')
-#         # cost_moments(x0_final, nb, show_plots=True)
-#     print('x0_final:', np.round(x0_final, 5), '\nK_final:', K_final)
-#     cost_forces(x0_final, show_plots=True)
-
-# moment_optimization()
-
+moment_optimization()
