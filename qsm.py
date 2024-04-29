@@ -901,7 +901,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         plt.ylabel('Force [mN]')
         plt.title('QSM force components in wing reference frame')
         plt.legend()
-        plt.savefig('debug_images/QSM forces_w; '+cfd_run+rightnow, dpi=300)
+        # plt.savefig('debug_images/QSM forces_w; '+cfd_run+rightnow, dpi=300)
         plt.show()
 
         # #qsm force components in global reference frame
@@ -980,11 +980,11 @@ def cost_moments(x, show_plots=False):
 
     C_lever = x[0]
     
-    lever = M_CFD_w[:, 0]/F_QSM_w[:, 2]
+    lever = M_CFD_w[:, 0]/F_CFD_w[:, 2]
 
-    lever_average = np.average(lever)
+    Mx_QSM_w_
     
-    Mx_QSM_w = C_lever*F_QSM_w[:, 2]*lever_average
+    Mx_QSM_w = C_lever*F_QSM_w[:, 2]
     # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
     K2_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) 
@@ -998,12 +998,22 @@ def cost_moments(x, show_plots=False):
     if show_plots:
         #cfd vs qsm x-component of moment 
         plt.figure()
+        plt.plot(timeline[:], , label='Mx_QSM_w', color='red')
+        plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
+        plt.xlabel('t/T [s]')
+        plt.ylabel('Moment [mN*mm]')
+        plt.legend()
+        # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
+        plt.show() 
+
+        #cfd vs qsm x-component of moment 
+        plt.figure()
         plt.plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
         plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
         plt.xlabel('t/T [s]')
         plt.ylabel('Moment [mN*mm]')
         plt.legend()
-        plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
+        # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
         plt.show() 
 
         #lever
@@ -1016,11 +1026,11 @@ def cost_moments(x, show_plots=False):
         plt.xlabel('t/T [s]')
         plt.ylabel('Lever [mm]')
         plt.legend()
-        plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
+        # plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
         plt.show()  
 
         # #cfd moments in wing reference frame (insect tools)
-        plt.figure()
+        # plt.figure()
         # plt.plot(t_Mw, Mx_CFD_w, label='Mx_CFD_w', color='red')
         # plt.plot(t_Mw, My_CFD_w, label='My_CFD_w', color='green')
         # plt.plot(t_Mw, Mz_CFD_w, label='Mz_CFD_w',  color='blue')
