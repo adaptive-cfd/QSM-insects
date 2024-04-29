@@ -820,6 +820,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         # # F_QSM_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], np.array([[1], [1], [1]]).reshape(3,))))
 
     if show_plots:
+        # plt.figure()
         # plt.plot(timeline, np.degrees(phis), label='ɸ')
         # plt.plot(timeline, np.degrees(alphas), label ='⍺')
         # plt.plot(timeline, np.degrees(thetas), label='Θ')
@@ -827,12 +828,14 @@ def cost_forces(x, nb=1000, show_plots=False):
         # plt.show()
 
         #AoA
+        plt.figure()
         plt.plot(timeline, np.degrees(AoA), label='AoA', color = '#F1680F')
         plt.xlabel('t/T')
         plt.legend()
         plt.show()
 
         #coefficients
+        plt.figure()
         graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
         gCl, gCd, gCrot, gCam1, gCam2, gCrd, gCwe = getAerodynamicCoefficients(x, graphAoA)
         fig, ax = plt.subplots()
@@ -844,6 +847,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         plt.show()
 
         #forces
+        plt.figure()
         plt.plot(timeline[:], Fx_QSM, label='Fx_QSM', color='red')
         plt.plot(timeline[:], Fy_QSM, label='Fy_QSM', color='green')
         plt.plot(timeline[:], Fz_QSM, label='Fz_QSM', color='blue')
@@ -858,6 +862,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         plt.show()
 
         #vertical forces
+        plt.figure()
         # plt.plot(timeline, Ftc[:, 2], label = 'Vertical lift force', color='gold')
         plt.plot(timeline, Frc[:, 2], label = 'Vertical rotational force', color='orange')
         # plt.plot(timeline, Ftd[:, 2], label = 'Vertical drag force', color='lightgreen')
@@ -872,7 +877,8 @@ def cost_forces(x, nb=1000, show_plots=False):
         # plt.savefig('debug/vertical_forces_no_Fam', dpi=2000)
         plt.show()
 
-        # #vertical forces_w 
+        # #vertical forces_w
+        # plt.figure() 
         # plt.plot(timeline, Ftc[:, 2], label = 'Vertical lift force_w', color='gold')
         # plt.plot(timeline, Frc_w[:, 2], label = 'Vertical rotational force_w', color='orange')
         # plt.plot(timeline, Ftd_w[:, 2], label = 'Vertical drag force_w', color='lightgreen')
@@ -887,6 +893,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         # plt.show()
 
         #qsm force components in wing reference frame
+        plt.figure()
         plt.plot(timeline, F_QSM_w[:, 0], label='Fx_w')
         plt.plot(timeline, F_QSM_w[:, 1], label='Fy_w')
         plt.plot(timeline, F_QSM_w[:, 2], label='Fz_w')
@@ -898,6 +905,7 @@ def cost_forces(x, nb=1000, show_plots=False):
         plt.show()
 
         # #qsm force components in global reference frame
+        # plt.figure()
         # plt.plot(timeline, F_QSM_g[:, 0], label='Fx_g')
         # plt.plot(timeline, F_QSM_g[:, 1], label='Fy_g')
         # plt.plot(timeline, F_QSM_g[:, 2], label='Fz_g')
@@ -989,6 +997,7 @@ def cost_moments(x, show_plots=False):
 
     if show_plots:
         #cfd vs qsm x-component of moment 
+        plt.figure()
         plt.plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
         plt.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
         plt.xlabel('t/T [s]')
@@ -998,6 +1007,7 @@ def cost_moments(x, show_plots=False):
         plt.show() 
 
         #lever
+        plt.figure()
         # plt.plot(timeline, lever[:, 0], color='#C00891', label='Lever x-component')
         # plt.plot(timeline, lever[:, 1], color='#0F2AEE', label='Lever y-component')
         # plt.plot(timeline, lever[:, 2], color='#0FEE8C', label='Lever z-component')
@@ -1010,6 +1020,7 @@ def cost_moments(x, show_plots=False):
         plt.show()  
 
         # #cfd moments in wing reference frame (insect tools)
+        plt.figure()
         # plt.plot(t_Mw, Mx_CFD_w, label='Mx_CFD_w', color='red')
         # plt.plot(t_Mw, My_CFD_w, label='My_CFD_w', color='green')
         # plt.plot(t_Mw, Mz_CFD_w, label='Mz_CFD_w',  color='blue')
@@ -1019,6 +1030,7 @@ def cost_moments(x, show_plots=False):
         # plt.show()    
 
         # #cfd moments in wing reference frame (insect tools)
+        # plt.figure()
         # # plt.plot(timeline, Mx_CFD_g_interp(timeline), label='Mx_CFD_w', color='red')
         # plt.plot(timeline, My_CFD_w_interp(timeline), label='My_CFD_w', color='green')
         # # plt.plot(timeline, Mz_CFD_w_interp(timeline), label='Mz_CFD_w',  color='blue')
@@ -1027,7 +1039,8 @@ def cost_moments(x, show_plots=False):
         # plt.legend()
         # plt.show()
 
-        # #cfd moments in global reference frame 
+        # #cfd moments in global reference frame
+        # plt.figure() 
         # plt.plot(timeline[:], Mx_CFD_g_interp(timeline), label='Mx_CFD', linestyle = 'dashed', color='red')
         # plt.plot(timeline[:], My_CFD_g_interp(timeline), label='My_CFD', linestyle = 'dashed', color='green')
         # plt.plot(timeline[:], Mz_CFD_g_interp(timeline), label='Mz_CFD', linestyle = 'dashed', color='blue')
@@ -1037,7 +1050,8 @@ def cost_moments(x, show_plots=False):
         # # plt.savefig('debug/moments', dpi=2000)
         # plt.show()
 
-        # #cfd moments in wing reference frame 
+        # #cfd moments in wing reference frame
+        # plt.figure() 
         # plt.plot(timeline, M_CFD_w[:, 0], label='Mx_CFD_w', color='red')
         # plt.plot(timeline, M_CFD_w[:, 1], label='My_CFD_w', color='green')
         # plt.plot(timeline, M_CFD_w[:, 2], label='Mz_CFD_w',  color='blue')
@@ -1047,7 +1061,7 @@ def cost_moments(x, show_plots=False):
         # plt.legend()
         # # plt.savefig('debug_images/CFD moments_w; '+cfd_run+rightnow, dpi=300)
         # plt.show()  
-        return K2
+    return K2
 
 K2 = cost_moments([1.3], show_plots=True)
 # print(type(K2))
