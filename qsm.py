@@ -1049,7 +1049,7 @@ def cost_moments(x, nb=1000, show_plots=False):
         # plt.show()  
         return K2
 
-#moment optimization! 
+#moment optimization
 def moment_optimization():
     x_0_moments =  [1]
     bounds = [(-6, 6)]
