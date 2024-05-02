@@ -1094,5 +1094,3 @@ def main(cfd_run):
     print('Lever value before optimization, calculated from M_CFD_w[:, 0]/F_CFD_w[:, 2] :', np.round(np.average(lever), 6))
 
     return [x0_force_optimized, x0_moment_optimized]
-
-main(cfd_run)

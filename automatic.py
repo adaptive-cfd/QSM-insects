@@ -1,13 +1,13 @@
 from qsm import main
 import os 
 
-simulations_folder_path = '/home/nico/Documents/knowledge/thesis/wing_motion_python/single-wing-simulations'
+simulations_folder_path = '/home/nico/Documents/school/thesis/wing_motion_python/single-wing-simulations'
 
 insects_simulations = os.listdir(simulations_folder_path)
 print(insects_simulations)
 
 for insect_simulation in insects_simulations:
-    if insect_simulation == 'musca-simulations':
+    if insect_simulation == 'musca-simulations': #this one can be commented out. it's currently the test folder but if commented out, all folders will be parsed. 
         insect_simulation_path = os.path.join(simulations_folder_path, insect_simulation)
         case_studies = os.listdir(insect_simulation_path)
         for case_study in case_studies:
