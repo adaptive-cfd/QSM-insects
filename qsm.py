@@ -20,12 +20,12 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-cfd_run = 'phi120.00_phim20.00_dTau0.05'
-def main(cfd_run):
+# cfd_run = 'phi120.00_phim20.00_dTau0.05'
+def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
     now = datetime.now()
-    rightnow = now.strftime(" %d-%m-%Y %I:%M:%S")+".png"
+    rightnow = now.strftime(" %d-%m-%Y_%I:%M:%S")+".png"
 
     #global variables:
 
@@ -822,7 +822,7 @@ def main(cfd_run):
             # # F_QSM_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], np.array([[1], [1], [1]]).reshape(3,))))
 
         if show_plots:
-            fig, axes = plt.subplots(3, 2)
+            fig, axes = plt.subplots(3, 2, figsize = (15, 15))
             axes[0, 0].plot(timeline, np.degrees(phis), label='ɸ')
             axes[0, 0].plot(timeline, np.degrees(alphas), label ='⍺')
             axes[0, 0].plot(timeline, np.degrees(thetas), label='Θ')
@@ -907,8 +907,9 @@ def main(cfd_run):
 
             plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.985, wspace=0.185, hspace=0.28)
             # plt.subplot_tool()
-            plt.show()
-            generatePlotsForKinematicsSequence()
+            # plt.show()
+            plt.savefig(folder_name+'/figure1.png', dpi=300)
+            # generatePlotsForKinematicsSequence()
         return K
 
     #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
@@ -924,17 +925,17 @@ def main(cfd_run):
             start = time.time()
             optimization = opt.minimize(cost_forces, args=(nb,), bounds=bounds, x0=x_0_forces)
             x0_forces_optimized = optimization.x
-            K_optimized = optimization.fun
+            K_forces_optimized = optimization.fun
             print('Computing for: ' + str(nb) + ' blades')
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
             x0_forces_optimized = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1]
-            K_optimized = ''
+            K_forces_optimized = ''
             print('Computing for: ' + str(nb) + ' blades')
             # cost_forces(x0_forces_optimized, nb, show_plots=True)
-        print('x0_forces_optimized:', np.round(x0_forces_optimized, 5), '\nK_optimized_forces:', K_optimized)
+        print('x0_forces_optimized:', np.round(x0_forces_optimized, 5), '\nK_optimized_forces:', K_forces_optimized)
         cost_forces(x0_forces_optimized, show_plots=True)
-        return x0_forces_optimized
+        return x0_forces_optimized, K_forces_optimized
 
     # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
     # #the results also fluctuate quite a bit using this optimizer.
@@ -962,7 +963,7 @@ def main(cfd_run):
     # import io
     # profile = cProfile.Profile()
     # profile.enable()
-    x0_force_optimized = force_optimization()
+    x0_force_optimized, K0_forces_optimized = force_optimization()
     # profile.disable()
     # s = io.StringIO()
     # ps = pstats.Stats(profile, stream=s).sort_stats('cumulative') # tottime
@@ -1080,17 +1081,17 @@ def main(cfd_run):
             start = time.time()
             optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
             x0_moment_optimized = optimization.x
-            K_optimized = optimization.fun
+            K_moment_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
             x0_moment_optimized = [1.0]
-            K_optimized = ''
+            K_moment_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
-        print('x0_moment_optimized:', np.round(x0_moment_optimized, 5), '\nK_optimized_moments:', K_optimized)
-        cost_moments(x0_moment_optimized, show_plots=True)
-        return x0_moment_optimized
+        print('x0_moment_optimized:', np.round(x0_moment_optimized, 5), '\nK_optimized_moments:', K_moment_optimized)
+        cost_moments(x0_moment_optimized, show_plots=False)
+        return x0_moment_optimized, K_moment_optimized
 
-    x0_moment_optimized = moment_optimization()
+    x0_moment_optimized, K0_moment_optimized = moment_optimization()
     print('Lever value before optimization, calculated from M_CFD_w[:, 0]/F_CFD_w[:, 2] :', np.round(np.average(lever), 6))
 
-    return [x0_force_optimized, x0_moment_optimized]
+    return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, K0_moment_optimized)
