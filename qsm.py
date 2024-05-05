@@ -20,7 +20,7 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-cfd_run = 'phi120.00_phim20.00_dTau0.05'
+# cfd_run = 'phi120.00_phim20.00_dTau0.05'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -697,7 +697,6 @@ def main(cfd_run, folder_name):
     # plt.ylabel('Moment [mN*mm]')
     # plt.title('CFD moments in wing reference frame')
     # plt.legend()
-    # plt.savefig('debug_images/cfd moments_w insect_tools vs own'+rightnow, dpi=300)
     # plt.show()
     # exit()
 
@@ -886,11 +885,11 @@ def main(cfd_run, folder_name):
 
             plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
             # plt.subplot_tool()
-            plt.show()
-            # plt.savefig(folder_name+'/figure1.png', dpi=300)
+            # plt.show()
+            plt.savefig(folder_name+'/figure1.png', dpi=300)
             
             ##FIGURE 2
-            fig, axes = plt.subplots(2, 2, figsize = (15, 15))
+            fig, axes = plt.subplots(2, 2, figsize = (15, 10))
 
             #coefficients
             graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
@@ -915,7 +914,6 @@ def main(cfd_run, folder_name):
             axes[0, 1].set_xlabel('t/T [s]')
             axes[0, 1].set_ylabel('Force [mN]')
             axes[0, 1].set_title('Vertical components of forces in global coordinate system')
-            # plt.savefig('debug/vertical_forces_no_Fam', dpi=2000)
             axes[0, 1].legend(loc = 'lower right')
         
             # #vertical forces_w
@@ -930,7 +928,6 @@ def main(cfd_run, folder_name):
             # plt.xlabel('t/T [s]')
             # plt.ylabel('Force [mN]')
             # plt.legend()
-            # # plt.savefig('debug/vertical_forces_no_Fam', dpi=300)
             # plt.show()
 
             #qsm + cfd force components in wing reference frame
@@ -943,7 +940,6 @@ def main(cfd_run, folder_name):
             axes[1, 0].set_xlabel('t/T [s]')
             axes[1, 0].set_ylabel('Force [mN]')
             axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
-            # plt.savefig('debug_images/QSM forces_w; '+cfd_run+rightnow, dpi=300)
             axes[1, 0].legend()
 
             #forces
@@ -956,7 +952,6 @@ def main(cfd_run, folder_name):
             axes[1, 1].set_xlabel('t/T [s]')
             axes[1, 1].set_ylabel('Force [mN]')
             axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 3)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
-            # plt.savefig('debug_images/forces; no Fwe; all _w; '+cfd_run+rightnow, dpi=300)
             axes[1, 1].legend(loc = 'upper right') 
 
             # #qsm force components in global reference frame
@@ -971,8 +966,8 @@ def main(cfd_run, folder_name):
 
             plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
             # plt.subplot_tool()
-            plt.show()
-            # plt.savefig(folder_name+'/figure2.png', dpi=300)
+            # plt.show()
+            plt.savefig(folder_name+'/figure2.png', dpi=300)
 
             # generatePlotsForKinematicsSequence()
         return K
@@ -1071,7 +1066,6 @@ def main(cfd_run, folder_name):
             ax1.set_ylabel('Moment [mN*mm]')
             ax1.set_title(f'Mx_QSM_w(non-optimized)/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
             ax1.legend()
-            # plt.savefig('debug_images/Mx_w QSM (no optimizer) vs CFD; '+cfd_run+rightnow, dpi=300)
 
             #cfd vs qsm x-component of moment 
             ax2.plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
@@ -1080,7 +1074,6 @@ def main(cfd_run, folder_name):
             ax2.set_ylabel('Moment [mN*mm]')
             ax2.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
             ax2.legend()
-            # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
 
             # #lever
             # plt.figure()
@@ -1092,7 +1085,6 @@ def main(cfd_run, folder_name):
             # plt.xlabel('t/T [s]')
             # plt.ylabel('Lever [mm]')
             # plt.legend()
-            # # plt.savefig('debug_images/lever; '+cfd_run+rightnow, dpi=300)
             # plt.show()
 
             # #cfd moments in wing reference frame (insect tools)
@@ -1123,7 +1115,6 @@ def main(cfd_run, folder_name):
             # plt.xlabel('t/T [s]')
             # plt.ylabel('Moment [mN*mm]')
             # plt.legend()
-            # # plt.savefig('debug/moments', dpi=2000)
             # plt.show()
 
             # #cfd moments in wing reference frame
@@ -1135,13 +1126,12 @@ def main(cfd_run, folder_name):
             # plt.ylabel('Moment [mN*mm]')
             # plt.title('CFD moments in wing reference frame')
             # plt.legend()
-            # # plt.savefig('debug_images/CFD moments_w; '+cfd_run+rightnow, dpi=300)
             # plt.show()  
 
             plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
             # plt.subplot_tool()
-            plt.show()
-            # plt.savefig(folder_name+'/figure3.png', dpi=300)
+            # plt.show()
+            plt.savefig(folder_name+'/figure3.png', dpi=300)
 
         return K2
 
@@ -1167,5 +1157,3 @@ def main(cfd_run, folder_name):
     x0_moment_optimized, K0_moment_optimized = moment_optimization()
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
-
-main(cfd_run, 'post-processing')
