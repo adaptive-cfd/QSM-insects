@@ -20,7 +20,7 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-cfd_run = 'phi120.00_phim20.00_dTau0.05'
+# cfd_run = 'phi120.00_phim20.00_dTau0.05'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -1102,11 +1102,11 @@ def main(cfd_run, folder_name):
             axs[0, 1].legend()
 
             #aerodynamic power x-component in wing reference frame
-            axs[1, 0].plot(timeline[:], P_CFD_interp(timeline), label='P_CFD', ls='-.', c='blue')
-            axs[1, 0].plot(timeline[:], P_QSM, label='P_QSM', c='orange')
+            axs[1, 0].plot(timeline[:], -P_CFD_interp(timeline), label='P_CFD', ls='-.', c='dodgerblue')
+            axs[1, 0].plot(timeline[:], P_QSM, label='P_QSM', c='orangered')
             axs[1, 0].set_xlabel('t/T [s]')
             axs[1, 0].set_ylabel('Power [mN*mm/s]')
-            axs[1, 0].set_title('x-component of aerodynamic power')
+            axs[1, 0].set_title('Aerodynamic power')
             axs[1, 0].legend()
 
             #cfd vs qsm x-component of moment 
@@ -1189,5 +1189,4 @@ def main(cfd_run, folder_name):
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
 
-
-main(cfd_run, 'post-processing')
+# main(cfd_run, 'post-processing')
