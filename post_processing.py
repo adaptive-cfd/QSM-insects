@@ -52,4 +52,4 @@ for insect_simulation in insects_simulations:
                         make_dir(folder_name)
                         forces_coefficients, moment_coefficient = main(cfd_run_path, folder_name)
                         writeArraytoCSV(['Cl1', 'Cl2', 'Cd1', 'Cd2', 'Crot', 'Cam1', 'Cam2', 'Crd', 'K0_forces'], forces_coefficients, folder_name+'/forces_coefficients.csv')
-                        writeArraytoCSV(['C_lever', 'K0_moment'], moment_coefficient, folder_name+'/moment_coefficient.csv')
+                        writeArraytoCSV(['C_lever (optimized lever)', 'Lever (non-optimized lever)', 'K0_moment'], moment_coefficient, folder_name+'/moment_coefficient.csv')

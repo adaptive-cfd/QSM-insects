@@ -172,6 +172,8 @@ def main(cfd_run, folder_name):
     lever_g = np.zeros((nt))
     lever_w = np.zeros((nt))
 
+    lever_w_average = 0
+
     delta_t = timeline[1] - timeline[0]
 
     # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
@@ -837,7 +839,7 @@ def main(cfd_run, folder_name):
             axes[0, 0].plot(timeline, np.degrees(AoA), label='AoA', color = 'purple')
             axes[0, 0].set_xlabel('t/T [s]')
             axes[0, 0].set_ylabel('[˚]')
-            axes[0, 0].legend()
+            axes[0, 0].legend(loc = 'upper right') 
 
             #u_wing_w (tip velocity in wing reference frame )
             axes[0, 1].plot(timeline, us_wing_w[:, 0], label='u_x_wing_w')
@@ -900,7 +902,6 @@ def main(cfd_run, folder_name):
             axes[0, 0].set_xlabel('AoA[°]')
             axes[0, 0].set_ylabel('[]')
             axes[0, 0].legend(loc = 'upper right') 
-            axes[0, 0].legend() 
 
             #vertical forces
             axes[0, 1].plot(timeline, Ftc[:, 2], label = 'Vertical lift force', color='gold')
@@ -915,7 +916,7 @@ def main(cfd_run, folder_name):
             axes[0, 1].set_ylabel('Force [mN]')
             axes[0, 1].set_title('Vertical components of forces in global coordinate system')
             # plt.savefig('debug/vertical_forces_no_Fam', dpi=2000)
-            axes[0, 1].legend()
+            axes[0, 1].legend(loc = 'lower right')
         
             # #vertical forces_w
             # plt.figure() 
@@ -936,9 +937,9 @@ def main(cfd_run, folder_name):
             axes[1, 0].plot(timeline, F_QSM_w[:, 0], label='Fx_QSM_w')
             axes[1, 0].plot(timeline, F_QSM_w[:, 1], label='Fy_QSM_w')
             axes[1, 0].plot(timeline, F_QSM_w[:, 2], label='Fz_QSM_w')
-            axes[1, 0].plot(timeline, F_CFD_w[:, 0], label='Fx_CFD_w')
-            axes[1, 0].plot(timeline, F_CFD_w[:, 1], label='Fy_CFD_w')
-            axes[1, 0].plot(timeline, F_CFD_w[:, 2], label='Fz_CFD_w')
+            axes[1, 0].plot(timeline, F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w')
+            axes[1, 0].plot(timeline, F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w')
+            axes[1, 0].plot(timeline, F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w')
             axes[1, 0].set_xlabel('t/T [s]')
             axes[1, 0].set_ylabel('Force [mN]')
             axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
@@ -998,7 +999,7 @@ def main(cfd_run, folder_name):
             print('Computing for: ' + str(nb) + ' blades')
             # cost_forces(x0_forces_optimized, nb, show_plots=True)
         print('x0_forces_optimized:', np.round(x0_forces_optimized, 5), '\nK_optimized_forces:', K_forces_optimized)
-        cost_forces(x0_forces_optimized, show_plots=False)
+        cost_forces(x0_forces_optimized, show_plots=True)
         return x0_forces_optimized, K_forces_optimized
 
     # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
@@ -1036,16 +1037,18 @@ def main(cfd_run, folder_name):
     #     f.write(s.getvalue())
 
     def cost_moments(x, show_plots=False):
-        nonlocal M_CFD_w, F_QSM_w, F_QSM_g
+        nonlocal M_CFD_w, F_QSM_w, F_QSM_g, lever_w_average
 
         C_lever = x[0]
         
         lever_w[:] = M_CFD_w[:, 0]/F_CFD_w[:, 2]
+
+        lever_w_average = np.average(lever_w)
         
-        Mx_QSM_w_nonoptimized = np.average(lever_w)*F_QSM_w[:, 2]
+        Mx_QSM_w_nonoptimized = lever_w_average*F_QSM_w[:, 2]
 
         Mx_QSM_w[:] = C_lever*F_QSM_w[:, 2]
-        
+
         # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
         K2_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) 
@@ -1062,11 +1065,11 @@ def main(cfd_run, folder_name):
 
             #cfd vs qsm x-component of moment 
             # plt.figure()
-            ax1.plot(timeline[:], Mx_QSM_w_nonoptimized[:],  label='Mx_QSM_w', color='red')
+            ax1.plot(timeline[:], Mx_QSM_w_nonoptimized[:],  label='Mx_QSM_w (non-optimized)', color='red')
             ax1.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
             ax1.set_xlabel('t/T [s]')
             ax1.set_ylabel('Moment [mN*mm]')
-            ax1.set_title('Mx_QSM_w (non-optimized) .vs. Mx_CFD_w ')
+            ax1.set_title(f'Mx_QSM_w(non-optimized)/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
             ax1.legend()
             # plt.savefig('debug_images/Mx_w QSM (no optimizer) vs CFD; '+cfd_run+rightnow, dpi=300)
 
@@ -1075,7 +1078,7 @@ def main(cfd_run, folder_name):
             ax2.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
             ax2.set_xlabel('t/T [s]')
             ax2.set_ylabel('Moment [mN*mm]')
-            ax2.set_title('Mx_QSM_w .vs. Mx_CFD_w ')
+            ax2.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
             ax2.legend()
             # plt.savefig('debug_images/Mx_w QSM vs CFD; '+cfd_run+rightnow, dpi=300)
 
@@ -1135,10 +1138,10 @@ def main(cfd_run, folder_name):
             # # plt.savefig('debug_images/CFD moments_w; '+cfd_run+rightnow, dpi=300)
             # plt.show()  
 
-            plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
-            plt.subplot_tool()
+            plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
+            # plt.subplot_tool()
             plt.show()
-            # plt.savefig(folder_name+'/figure2.png', dpi=300)
+            # plt.savefig(folder_name+'/figure3.png', dpi=300)
 
         return K2
 
@@ -1162,8 +1165,7 @@ def main(cfd_run, folder_name):
         return x0_moment_optimized, K_moment_optimized
 
     x0_moment_optimized, K0_moment_optimized = moment_optimization()
-    print('Lever value before optimization, calculated from M_CFD_w[:, 0]/F_CFD_w[:, 2] :', np.round(np.average(lever), 6))
 
-    return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, K0_moment_optimized)
+    return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
 
 main(cfd_run, 'post-processing')
