@@ -20,7 +20,7 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-# cfd_run = 'phi120.00_phim20.00_dTau0.05'
+cfd_run = 'phi120.00_phim20.00_dTau0.05'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -176,25 +176,44 @@ def main(cfd_run, folder_name):
 
     delta_t = timeline[1] - timeline[0]
 
-    # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
-    forces_CFD = it.load_t_file(cfd_run+'/forces_rightwing.t', T0=[1.0, 2.0])
-    t = forces_CFD[:, 0]-1.0
-    Fx_CFD_g = forces_CFD[:, 1]
-    Fy_CFD_g = forces_CFD[:, 2]
-    Fz_CFD_g = forces_CFD[:, 3]
-
-    # moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
-    moments_CFD = it.load_t_file(cfd_run+'/moments_rightwing.t', T0=[1.0, 2.0])
-    #no need to read in the time again as it's the same from the forces file
-    Mx_CFD_g = moments_CFD[:, 1]
-    My_CFD_g = moments_CFD[:, 2]
-    Mz_CFD_g = moments_CFD[:, 3]
-    # M_CFD = moments_CFD[:, 1:4]
-
     if isLeft == 0: 
         print('The parsed data correspond to the right wing.')
+        # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
+        forces_CFD = it.load_t_file(cfd_run+'/forces_rightwing.t', T0=[1.0, 2.0])
+        t = forces_CFD[:, 0]-1.0
+        Fx_CFD_g = forces_CFD[:, 1]
+        Fy_CFD_g = forces_CFD[:, 2]
+        Fz_CFD_g = forces_CFD[:, 3]
+
+        # moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
+        moments_CFD = it.load_t_file(cfd_run+'/moments_rightwing.t', T0=[1.0, 2.0])
+        #no need to read in the time again as it's the same from the forces file
+        Mx_CFD_g = moments_CFD[:, 1]
+        My_CFD_g = moments_CFD[:, 2]
+        Mz_CFD_g = moments_CFD[:, 3]
+        # M_CFD = moments_CFD[:, 1:4]
     else: 
+        # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
+        forces_CFD = it.load_t_file(cfd_run+'/forces_leftwing.t', T0=[1.0, 2.0])
+        t = forces_CFD[:, 0]-1.0
+        Fx_CFD_g = forces_CFD[:, 1]
+        Fy_CFD_g = forces_CFD[:, 2]
+        Fz_CFD_g = forces_CFD[:, 3]
+
+        # moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
+        moments_CFD = it.load_t_file(cfd_run+'/moments_leftwing.t', T0=[1.0, 2.0])
+        #no need to read in the time again as it's the same from the forces file
+        Mx_CFD_g = moments_CFD[:, 1]
+        My_CFD_g = moments_CFD[:, 2]
+        Mz_CFD_g = moments_CFD[:, 3]
+        # M_CFD = moments_CFD[:, 1:4]
         print('The parsed data correspond to the left wing.')
+
+
+    # power_CFD = it.load_t_file('cfd_run/aero_power.t', T0=[1.0, 2.0])
+    power_CFD = it.load_t_file(cfd_run+'/aero_power.t', T0=[1.0, 2.0])
+    #no need to read in the time again as it's the same from the forces file
+    P_CFD = power_CFD[:, 1]
 
     if np.round(forces_CFD[-1, 0], 2) != time_max: 
         raise ValueError('CFD cycle number does not match that of the actual run. Check your PARAMS, forces and moments files\n')
@@ -211,6 +230,8 @@ def main(cfd_run, folder_name):
     Mz_CFD_g_interp = interp1d(t, Mz_CFD_g, fill_value='extrapolate')
     M_CFD_g = np.vstack((Mx_CFD_g_interp(timeline), My_CFD_g_interp(timeline), Mz_CFD_g_interp(timeline))).transpose()
 
+    P_CFD_interp = interp1d(t, P_CFD, fill_value='extrapolate')
+
     Fx_CFD_w = np.zeros((t.shape[0]))
     Fy_CFD_w = np.zeros((t.shape[0]))
     Fz_CFD_w = np.zeros((t.shape[0])) 
@@ -226,6 +247,8 @@ def main(cfd_run, folder_name):
 
     Mx_QSM_w = np.zeros((nt))
     Mx_QSM_g = np.zeros((nt))
+
+    P_QSM = np.zeros((nt))
 
     #gloabl reference frame
     Ftc = np.zeros((nt, 3))
@@ -1032,7 +1055,7 @@ def main(cfd_run, folder_name):
     #     f.write(s.getvalue())
 
     def cost_moments(x, show_plots=False):
-        nonlocal M_CFD_w, F_QSM_w, F_QSM_g, lever_w_average
+        nonlocal M_CFD_w, F_QSM_w, F_QSM_g, lever_w_average, rots_wing_w
 
         C_lever = x[0]
         
@@ -1043,6 +1066,8 @@ def main(cfd_run, folder_name):
         Mx_QSM_w_nonoptimized = lever_w_average*F_QSM_w[:, 2]
 
         Mx_QSM_w[:] = C_lever*F_QSM_w[:, 2]
+
+        P_QSM[:] = Mx_QSM_w[:]*rots_wing_w[:, 0].reshape(100,)
 
         # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
@@ -1056,24 +1081,41 @@ def main(cfd_run, folder_name):
 
         if show_plots:
             ##FIGURE 3
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (15, 15))
+            fig, axs = plt.subplots(2, 2, figsize = (15, 10))
+
+            #cfd moments in wing reference frame
+            axs[0, 0].plot(timeline, M_CFD_w[:, 0], label='Mx_CFD_w', color='red')
+            axs[0, 0].plot(timeline, M_CFD_w[:, 1], label='My_CFD_w', color='green')
+            axs[0, 0].plot(timeline, M_CFD_w[:, 2], label='Mz_CFD_w',  color='blue')
+            axs[0, 0].set_xlabel('t/T [s]')
+            axs[0, 0].set_ylabel('Moment [mN*mm]')
+            axs[0, 0].set_title('CFD moments in wing reference frame')
+            axs[0, 0].legend()
 
             #cfd vs qsm x-component of moment 
             # plt.figure()
-            ax1.plot(timeline[:], Mx_QSM_w_nonoptimized[:],  label='Mx_QSM_w (non-optimized)', color='red')
-            ax1.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
-            ax1.set_xlabel('t/T [s]')
-            ax1.set_ylabel('Moment [mN*mm]')
-            ax1.set_title(f'Mx_QSM_w(non-optimized)/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
-            ax1.legend()
+            axs[0, 1].plot(timeline[:], Mx_QSM_w_nonoptimized[:],  label='Mx_QSM_w (non-optimized)', color='red')
+            axs[0, 1].plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
+            axs[0, 1].set_xlabel('t/T [s]')
+            axs[0, 1].set_ylabel('Moment [mN*mm]')
+            axs[0, 1].set_title(f'Mx_QSM_w(non-optimized)/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
+            axs[0, 1].legend()
+
+            #aerodynamic power x-component in wing reference frame
+            axs[1, 0].plot(timeline[:], P_CFD_interp(timeline), label='P_CFD', ls='-.', c='blue')
+            axs[1, 0].plot(timeline[:], P_QSM, label='P_QSM', c='orange')
+            axs[1, 0].set_xlabel('t/T [s]')
+            axs[1, 0].set_ylabel('Power [mN*mm/s]')
+            axs[1, 0].set_title('x-component of aerodynamic power')
+            axs[1, 0].legend()
 
             #cfd vs qsm x-component of moment 
-            ax2.plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
-            ax2.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
-            ax2.set_xlabel('t/T [s]')
-            ax2.set_ylabel('Moment [mN*mm]')
-            ax2.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
-            ax2.legend()
+            axs[1, 1].plot(timeline[:], Mx_QSM_w, label='Mx_QSM_w', color='red')
+            axs[1, 1].plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', color='blue')
+            axs[1, 1].set_xlabel('t/T [s]')
+            axs[1, 1].set_ylabel('Moment [mN*mm]')
+            axs[1, 1].set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
+            axs[1, 1].legend()
 
             # #lever
             # plt.figure()
@@ -1115,18 +1157,7 @@ def main(cfd_run, folder_name):
             # plt.xlabel('t/T [s]')
             # plt.ylabel('Moment [mN*mm]')
             # plt.legend()
-            # plt.show()
-
-            # #cfd moments in wing reference frame
-            # plt.figure() 
-            # plt.plot(timeline, M_CFD_w[:, 0], label='Mx_CFD_w', color='red')
-            # plt.plot(timeline, M_CFD_w[:, 1], label='My_CFD_w', color='green')
-            # plt.plot(timeline, M_CFD_w[:, 2], label='Mz_CFD_w',  color='blue')
-            # plt.xlabel('t/T [s]')
-            # plt.ylabel('Moment [mN*mm]')
-            # plt.title('CFD moments in wing reference frame')
-            # plt.legend()
-            # plt.show()  
+            # plt.show() 
 
             plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
             # plt.subplot_tool()
@@ -1150,10 +1181,13 @@ def main(cfd_run, folder_name):
             x0_moment_optimized = [1.0]
             K_moment_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
-        print('x0_moment_optimized:', np.round(x0_moment_optimized, 5), '\nK_optimized_moments:', K_moment_optimized)
+        print('x0_moment_optimized:', np.round(x0_moment_optimized, 5), '\nK_moment_optimized:', K_moment_optimized)
         cost_moments(x0_moment_optimized, show_plots=True)
         return x0_moment_optimized, K_moment_optimized
 
     x0_moment_optimized, K0_moment_optimized = moment_optimization()
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
+
+
+main(cfd_run, 'post-processing')
