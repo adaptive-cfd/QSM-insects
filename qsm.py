@@ -20,7 +20,7 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00'
-# cfd_run = 'phi120.00_phim20.00_dTau0.05'
+cfd_run = 'Dioctria_linearis'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -1189,4 +1189,4 @@ def main(cfd_run, folder_name):
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
 
-# main(cfd_run, 'post-processing')
+main(cfd_run, 'post-processing')

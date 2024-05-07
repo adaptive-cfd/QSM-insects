@@ -179,14 +179,14 @@ def main(cfd_run, folder_name):
     if isLeft == 0: 
         print('The parsed data correspond to the right wing.')
         # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
-        forces_CFD = it.load_t_file(cfd_run+'/forces_rightwing.t', T0=[1.0, 2.0])
+        forces_CFD = it.load_t_file(cfd_run+'/forces_rightwing.t', T0=[1.0, 3.0])
         t = forces_CFD[:, 0]-1.0
         Fx_CFD_g = forces_CFD[:, 1]
         Fy_CFD_g = forces_CFD[:, 2]
         Fz_CFD_g = forces_CFD[:, 3]
 
         # moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
-        moments_CFD = it.load_t_file(cfd_run+'/moments_rightwing.t', T0=[1.0, 2.0])
+        moments_CFD = it.load_t_file(cfd_run+'/moments_rightwing.t', T0=[1.0, 3.0])
         #no need to read in the time again as it's the same from the forces file
         Mx_CFD_g = moments_CFD[:, 1]
         My_CFD_g = moments_CFD[:, 2]
@@ -194,14 +194,14 @@ def main(cfd_run, folder_name):
         # M_CFD = moments_CFD[:, 1:4]
     else: 
         # forces_CFD = it.load_t_file('cfd_run/forces_rightwing.t', T0=[1.0,2.0])
-        forces_CFD = it.load_t_file(cfd_run+'/forces_leftwing.t', T0=[1.0, 2.0])
+        forces_CFD = it.load_t_file(cfd_run+'/forces_leftwing.t', T0=[1.0, 3.0])
         t = forces_CFD[:, 0]-1.0
         Fx_CFD_g = forces_CFD[:, 1]
         Fy_CFD_g = forces_CFD[:, 2]
         Fz_CFD_g = forces_CFD[:, 3]
 
         # moments_CFD = it.load_t_file('cfd_run/moments_rightwing.t', T0=[1.0, 2.0])
-        moments_CFD = it.load_t_file(cfd_run+'/moments_leftwing.t', T0=[1.0, 2.0])
+        moments_CFD = it.load_t_file(cfd_run+'/moments_leftwing.t', T0=[1.0, 3.0])
         #no need to read in the time again as it's the same from the forces file
         Mx_CFD_g = moments_CFD[:, 1]
         My_CFD_g = moments_CFD[:, 2]
@@ -211,11 +211,15 @@ def main(cfd_run, folder_name):
 
 
     # power_CFD = it.load_t_file('cfd_run/aero_power.t', T0=[1.0, 2.0])
-    power_CFD = it.load_t_file(cfd_run+'/aero_power.t', T0=[1.0, 2.0])
+    power_CFD = it.load_t_file(cfd_run+'/aero_power.t', T0=[1.0, 3.0])
     #no need to read in the time again as it's the same from the forces file
     P_CFD = power_CFD[:, 1]
 
-    if np.round(forces_CFD[-1, 0], 2) != time_max: 
+    # print(np.round(forces_CFD[-1, 0], 1))
+    # print(time_max)
+    # exit()
+
+    if np.round(forces_CFD[-1, 0], 1) != time_max: 
         raise ValueError('CFD cycle number does not match that of the actual run. Check your PARAMS, forces and moments files\n')
 
     print('The number of cycles is ', time_max, '. The forces and moments data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
@@ -230,7 +234,7 @@ def main(cfd_run, folder_name):
     Mz_CFD_g_interp = interp1d(t, Mz_CFD_g, fill_value='extrapolate')
     M_CFD_g = np.vstack((Mx_CFD_g_interp(timeline), My_CFD_g_interp(timeline), Mz_CFD_g_interp(timeline))).transpose()
 
-    P_CFD_interp = interp1d(t, P_CFD, fill_value='extrapolate')
+    P_CFD_interp = interp1d(t, -P_CFD, fill_value='extrapolate')
 
     Fx_CFD_w = np.zeros((t.shape[0]))
     Fy_CFD_w = np.zeros((t.shape[0]))
@@ -248,6 +252,7 @@ def main(cfd_run, folder_name):
     Mx_QSM_w = np.zeros((nt))
     Mx_QSM_g = np.zeros((nt))
 
+    P_QSM_nonoptimized = np.zeros((nt))
     P_QSM = np.zeros((nt))
 
     #gloabl reference frame
@@ -974,7 +979,7 @@ def main(cfd_run, folder_name):
             axes[1, 1].plot(timeline[:], Fz_CFD_g_interp(timeline), label='Fz_CFD_g', linestyle = 'dashed', color='blue')
             axes[1, 1].set_xlabel('t/T [s]')
             axes[1, 1].set_ylabel('Force [mN]')
-            axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 3)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
+            axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 4)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
             axes[1, 1].legend(loc = 'upper right') 
 
             # #qsm force components in global reference frame
@@ -1088,7 +1093,7 @@ def main(cfd_run, folder_name):
             ax1.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', ls='-.', color='blue')
             ax1.set_xlabel('t/T [s]')
             ax1.set_ylabel('Moment [mN*mm]')
-            ax1.set_title(f'Mx_QSM_w(non-optimized)/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
+            ax1.set_title(f'(Non-optimized) Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w_nonoptimized)/np.linalg.norm(M_CFD_w[:, 0]), 4)}')
             ax1.legend()
 
             #cfd vs qsm x-component of moment 
@@ -1096,7 +1101,7 @@ def main(cfd_run, folder_name):
             ax2.plot(timeline[:], M_CFD_w[:, 0], label='Mx_CFD_w', ls='-.', color='blue')
             ax2.set_xlabel('t/T [s]')
             ax2.set_ylabel('Moment [mN*mm]')
-            ax2.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 3)}')
+            ax2.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 4)}')
             ax2.legend()
 
             # #cfd moments in wing reference frame
@@ -1183,7 +1188,11 @@ def main(cfd_run, folder_name):
         
         C_power = x[0]
 
+        P_QSM_nonoptimized[:] = Mx_QSM_w[:]*rots_wing_w[:, 0].reshape(100,)
+
         P_QSM[:] = Mx_QSM_w[:]*rots_wing_w[:, 0].reshape(100,)*C_power
+
+        P_CFD_x = M_CFD_w[:,0]*rots_wing_w[:, 0].reshape(100,)
 
         K3_num = np.linalg.norm(P_QSM - P_CFD_interp(timeline)) 
         K3_den = np.linalg.norm(P_CFD_interp(timeline))
@@ -1194,14 +1203,24 @@ def main(cfd_run, folder_name):
             K3 = K3_num
 
         if show_plots:
-            fig, axs = plt.subplots(figsize = (15, 10))
-            #aerodynamic power x-component in wing reference frame
-            axs.plot(timeline[:], P_CFD_interp(timeline), label='P_CFD', ls='-.', c='blue')
-            axs.plot(timeline[:], P_QSM, label='P_QSM', c='orange')
-            axs.set_xlabel('t/T [s]')
-            axs.set_ylabel('Power [mN*mm/s]')
-            axs.set_title('x-component of aerodynamic power')
-            axs.legend()
+            ##FIGURE 4
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (15, 15))
+
+            #non-optimized aerodynamic power 
+            ax1.plot(timeline[:], P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='orange')
+            ax1.plot(timeline[:], P_CFD_x, label='P_CFD', ls='-.', c='blue')
+            ax1.set_xlabel('t/T [s]')
+            ax1.set_ylabel('Power [mN*mm/s]')
+            ax1.set_title(f'(Non-optimized) P_QSM/P_CFD = {np.round(np.linalg.norm(P_QSM_nonoptimized)/np.linalg.norm(P_CFD_interp(timeline)), 4)}')
+            ax1.legend()
+
+            #optimized aerodynamic power
+            ax2.plot(timeline[:], P_QSM, label='P_QSM (optimized)', color='orange')
+            ax2.plot(timeline[:], P_CFD_x, label='P_CFD', ls='-.', color='blue')
+            ax2.set_xlabel('t/T [s]')
+            ax2.set_ylabel('Power [mN*mm/s]')
+            ax2.set_title(f'P_QSM/P_CFD = {np.round(np.linalg.norm(P_QSM)/np.linalg.norm(P_CFD_interp(timeline)), 4)}')
+            ax2.legend()
 
             plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
             # plt.subplot_tool()
@@ -1229,9 +1248,8 @@ def main(cfd_run, folder_name):
         cost_power(x0_power_optimized, show_plots=True)
         return x0_power_optimized, K_power_optimized
     
-    power_optimization()
+    x0_power_optimized, K0_power_optimized = power_optimization()
 
-    return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized])
+    return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moment_optimized, [lever_w_average, K0_moment_optimized]), np.append(x0_power_optimized, K0_power_optimized)
 
-
-main(cfd_run, 'post-processing')
+main(cfd_run, 'post-processing2')
