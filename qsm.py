@@ -20,7 +20,7 @@ from debug import writeArraytoFile
 from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
-cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
+# cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -34,10 +34,16 @@ def main(cfd_run, folder_name):
     if 'from_file' in wingShape:
         wingShape_file = os.path.join(cfd_run, wingShape.replace('from_file::', ''))
     time_max = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Time', 'time_max', dtype=float)
+    u_infty = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'ACM-new', 'u_mean_set', dtype=str)
+    u_infty = u_infty.split(' ')
+    u_infty = -np.float_(u_infty)
+    # for component in u_infty:
+    #     float(component)
+    # u_infty = np.array(u_infty)
     kinematics_file = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'FlappingMotion_right', dtype=str)
     if 'from_file' in kinematics_file:
         kinematics_file = os.path.join(cfd_run, kinematics_file.replace('from_file::', '')) 
-
+    
     xc, yc = it.visualize_wing_shape_file(wingShape_file)
     zc = np.zeros_like(xc)
     wingPoints = np.vstack([xc, yc, zc])
@@ -83,18 +89,36 @@ def main(cfd_run, folder_name):
     # load kinematics data by means of load_t_file function from insect_tools library 
     kinematics_cfd = it.load_t_file(cfd_run+'/kinematics.t')
     timeline = kinematics_cfd[:,0].flatten()
-    alphas_it = kinematics_cfd[:,11].flatten()
-    phis_it = kinematics_cfd[:,12].flatten()
-    thetas_it = kinematics_cfd[:,13].flatten()
+    psis_it = kinematics_cfd[:, 4].flatten()
+    betas_it = kinematics_cfd[:, 5].flatten()
+    gammas_it = kinematics_cfd[:, 6].flatten()
+    etas_it = kinematics_cfd[:, 7].flatten()
 
-    #interpolate alpha, phi and theta  with respect to the original timeline
-    alphas_interp = interp1d(timeline.flatten(), alphas_it.flatten(), fill_value='extrapolate')
-    phis_interp = interp1d(timeline.flatten(), phis_it.flatten(), fill_value='extrapolate')
-    thetas_interp = interp1d(timeline.flatten(), thetas_it.flatten(), fill_value='extrapolate')
+    if isLeft==0: 
+        alphas_it = kinematics_cfd[:,11].flatten()
+        phis_it = kinematics_cfd[:,12].flatten()
+        thetas_it = kinematics_cfd[:,13].flatten()
+    else:
+        alphas_it = kinematics_cfd[:, 8].flatten()
+        phis_it = kinematics_cfd[:, 9].flatten()
+        thetas_it = kinematics_cfd[:, 10].flatten()
+
+    #interpolate psi, beta, gamma, alpha, phi and theta  with respect to the original timeline
+    psis_interp = interp1d(timeline, psis_it, fill_value='extrapolate')
+    betas_interp = interp1d(timeline, betas_it, fill_value='extrapolate')
+    gammas_interp = interp1d(timeline, gammas_it, fill_value='extrapolate')
+    etas_interp = interp1d(timeline, etas_it, fill_value='extrapolate')
+    alphas_interp = interp1d(timeline, alphas_it, fill_value='extrapolate')
+    phis_interp = interp1d(timeline, phis_it, fill_value='extrapolate')
+    thetas_interp = interp1d(timeline, thetas_it, fill_value='extrapolate')
 
     #timeline downsizing 
     timeline = np.linspace(0, 1, 101)
 
+    psis = psis_interp(timeline)[:-1]
+    betas = betas_interp(timeline)[:-1]
+    gammas = gammas_interp(timeline)[:-1]
+    etas = etas_interp(timeline)[:-1]
     alphas = alphas_interp(timeline)[:-1]
     phis = phis_interp(timeline)[:-1]
     thetas = thetas_interp(timeline)[:-1]
@@ -249,9 +273,16 @@ def main(cfd_run, folder_name):
 
     M_CFD_w = np.zeros((nt, 3))
 
+    #QSM moment components used in cost_moments. these will be the optimized moments that best fit the CFD ones
     Mx_QSM_w = np.zeros((nt))
     My_QSM_w = np.zeros((nt))
     Mz_QSM_w = np.zeros((nt))
+
+    #QSM moment components used in cost_power. these will be used to calculate the power that best fits the CFD one. 
+    Mx_QSM_w_power = np.zeros((nt))
+    My_QSM_w_power = np.zeros((nt))
+    Mz_QSM_w_power = np.zeros((nt))
+
     Mx_QSM_g = np.zeros((nt))
 
     P_QSM_nonoptimized = np.zeros((nt))
@@ -274,6 +305,7 @@ def main(cfd_run, folder_name):
     Fwe_w = np.zeros((nt, 3))
 
     F_QSM_w = np.zeros((nt, 3))
+    F_QSM_w_2 = np.zeros((nt, 3))
     F_QSM_g = np.zeros((nt, 3))
     Fz_QSM_w_vector = np.zeros((nt, 3))
 
@@ -410,8 +442,8 @@ def main(cfd_run, folder_name):
         u_wing_w = np.matmul(wingRotationMatrix, np.matmul(strokeRotationMatrix, np.matmul(bodyRotationMatrix, u_wing_g)))
         return u_wing_w
 
-    def getWindDirectioninWingReferenceFrame(u_wind_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix): 
-        u_wind_b = np.matmul(bodyRotationMatrix, u_wind_g.reshape(3,1))
+    def getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix): 
+        u_wind_b = np.matmul(bodyRotationMatrix, u_flight_g.reshape(3,1))
         u_wind_s = np.matmul(strokeRotationMatrix, u_wind_b)
         u_wind_w = np.matmul(wingRotationMatrix, u_wind_s)
         return u_wind_w
@@ -547,7 +579,7 @@ def main(cfd_run, folder_name):
         # thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / (delta_t)
 
         # parameter array: psi [0], beta[1], gamma[2], eta[3], phi[4], alpha[5], theta[6]
-        parameters = [0, 0, 0, -80*np.pi/180, phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
+        parameters = [psis[timeStep], betas[timeStep], gammas[timeStep], etas[timeStep], phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
         parameters_dt = [0, 0, 0, 0, phis_dt, alphas_dt, thetas_dt]
 
         strokePoints, wingRotationMatrix, wingRotationMatrixTrans = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
@@ -601,11 +633,10 @@ def main(cfd_run, folder_name):
         planar_rots_wing_w[timeStep, :] = planar_rot_wing_w
         planar_rots_wing_g[timeStep, :] = planar_rot_wing_g
 
-        # u_wind_g = np.array([0.0, 0.0, 0.0])
-        u_wind_g = np.array([0.248, 0.0, 0.6]) #absolute wind velocity 
+        # u_infty = np.array([0.248, 0.0, 0.6]) #absolute wind velocity 
 
-        u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), y_wing_g.reshape(1,3)) + u_wind_g
-        us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_wind_g has been introduced! 
+        u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), y_wing_g.reshape(1,3)) + u_infty
+        us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
 
         u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix)
         us_wing_w[timeStep, :] = u_wing_w
@@ -756,7 +787,7 @@ def main(cfd_run, folder_name):
     #cost function which tells us how far off our QSM values are from the CFD ones for the forces
     def cost_forces(x, nb=1000, show_plots=False):
         #global variable must be imported in order to modify them locally
-        nonlocal Ftc_magnitude, Ftd_magnitude, Frc_magnitude, Fam_magnitude, Frd_magnitude, Fam, AoA
+        nonlocal Ftc_magnitude, Ftd_magnitude, Frc_magnitude, Fam_magnitude, Frd_magnitude, Fam, AoA, F_QSM_g, F_QSM_w
 
         Cl, Cd, Crot, Cam1, Cam2, Crd = getAerodynamicCoefficients(x, np.array(AoA))
 
@@ -825,19 +856,19 @@ def main(cfd_run, folder_name):
             Frd[i, :] = (Frd_magnitude[i] * z_wing_g_sequence[i])
             Fwe[i, :] = (Fwe_magnitude[i] * z_wing_g_sequence[i])
 
-        Fx_QSM = Ftc[:, 0] + Ftd[:, 0] + Frc[:, 0] + Fam[:, 0] + Frd[:, 0] + Fwe[:, 0]
-        Fy_QSM = Ftc[:, 1] + Ftd[:, 1] + Frc[:, 1] + Fam[:, 1] + Frd[:, 1] + Fwe[:, 1]
-        Fz_QSM = Ftc[:, 2] + Ftd[:, 2] + Frc[:, 2] + Fam[:, 2] + Frd[:, 2] + Fwe[:, 2]
+        Fx_QSM_g = Ftc[:, 0] + Ftd[:, 0] + Frc[:, 0] + Fam[:, 0] + Frd[:, 0] + Fwe[:, 0]
+        Fy_QSM_g = Ftc[:, 1] + Ftd[:, 1] + Frc[:, 1] + Fam[:, 1] + Frd[:, 1] + Fwe[:, 1]
+        Fz_QSM_g = Ftc[:, 2] + Ftd[:, 2] + Frc[:, 2] + Fam[:, 2] + Frd[:, 2] + Fwe[:, 2]
 
         F_QSM_g[:] = Ftc + Ftd + Frc + Fam + Frd + Fwe  
 
-        K_num = np.linalg.norm(Fx_QSM-Fx_CFD_g_interp(timeline)) + np.linalg.norm(Fz_QSM-Fz_CFD_g_interp(timeline)) #+ np.linalg.norm(Fy_QSM+Fy_CFD_g_interp(timeline))
-        K_den = np.linalg.norm(Fx_CFD_g_interp(timeline)) + np.linalg.norm(Fz_CFD_g_interp(timeline)) #+ np.linalg.norm(-Fy_CFD_g_interp(timeline))
+        K_forces_num = np.linalg.norm(Fx_QSM_g-Fx_CFD_g_interp(timeline)) + np.linalg.norm(Fz_QSM_g-Fz_CFD_g_interp(timeline)) #+ np.linalg.norm(Fy_QSM_g+Fy_CFD_g_interp(timeline))
+        K_forces_den = np.linalg.norm(Fx_CFD_g_interp(timeline)) + np.linalg.norm(Fz_CFD_g_interp(timeline)) #+ np.linalg.norm(-Fy_CFD_g_interp(timeline))
         
-        if K_den != 0: 
-            K = K_num/K_den
+        if K_forces_den != 0: 
+            K_forces = K_forces_num/K_forces_den
         else:
-            K = K_num
+            K_forces = K_forces_num
 
         for i in range(nt):
             F_QSM_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], F_QSM_g[i, :])
@@ -916,7 +947,7 @@ def main(cfd_run, folder_name):
             plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
             # plt.subplot_tool()
             # plt.show()
-            plt.savefig(folder_name+'/figure1.png', dpi=300)
+            plt.savefig(folder_name+'/kinematics_figure.png', dpi=300)
             
             ##FIGURE 2
             fig, axes = plt.subplots(2, 2, figsize = (15, 10))
@@ -939,7 +970,7 @@ def main(cfd_run, folder_name):
             axes[0, 1].plot(timeline, Fam[:, 2], label = 'Vertical added mass force', color='red')
             axes[0, 1].plot(timeline, Frd[:, 2], label = 'Vertical rotational drag force', color='green')
             # axes[0, 1].plot(timeline, Fwe[:, 2], label = 'Vertical wagner effect force')
-            axes[0, 1].plot(timeline, Fz_QSM, label = 'Vertical QSM force', ls='-.', color='blue')
+            axes[0, 1].plot(timeline, Fz_QSM_g, label = 'Vertical QSM force', ls='-.', color='blue')
             axes[0, 1].plot(timeline, Fz_CFD_g_interp(timeline), label = 'Vertical CFD force', ls='--', color='purple')
             axes[0, 1].set_xlabel('t/T [s]')
             axes[0, 1].set_ylabel('Force [mN]')
@@ -962,10 +993,10 @@ def main(cfd_run, folder_name):
 
             #qsm + cfd force components in wing reference frame
             axes[1, 0].plot(timeline, F_QSM_w[:, 0], label='Fx_QSM_w', c='r')
-            axes[1, 0].plot(timeline, F_QSM_w[:, 1], label='Fy_QSM_w', c='g')
-            axes[1, 0].plot(timeline, F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
             axes[1, 0].plot(timeline, F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
+            axes[1, 0].plot(timeline, F_QSM_w[:, 1], label='Fy_QSM_w', c='g')
             axes[1, 0].plot(timeline, F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
+            axes[1, 0].plot(timeline, F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
             axes[1, 0].plot(timeline, F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
             axes[1, 0].set_xlabel('t/T [s]')
             axes[1, 0].set_ylabel('Force [mN]')
@@ -973,16 +1004,16 @@ def main(cfd_run, folder_name):
             axes[1, 0].legend()
 
             #forces
-            axes[1, 1].plot(timeline[:], Fx_QSM, label='Fx_QSM_g', color='red')
-            axes[1, 1].plot(timeline[:], Fy_QSM, label='Fy_QSM_g', color='green')
-            axes[1, 1].plot(timeline[:], Fz_QSM, label='Fz_QSM_g', color='blue')
+            axes[1, 1].plot(timeline[:], Fx_QSM_g, label='Fx_QSM_g', color='red')
             axes[1, 1].plot(timeline[:], Fx_CFD_g_interp(timeline), label='Fx_CFD_g', linestyle = 'dashed', color='red')
+            axes[1, 1].plot(timeline[:], Fy_QSM_g, label='Fy_QSM_g', color='green')
             axes[1, 1].plot(timeline[:], Fy_CFD_g_interp(timeline), label='Fy_CFD_g', linestyle = 'dashed', color='green')
+            axes[1, 1].plot(timeline[:], Fz_QSM_g, label='Fz_QSM_g', color='blue')            
             axes[1, 1].plot(timeline[:], Fz_CFD_g_interp(timeline), label='Fz_CFD_g', linestyle = 'dashed', color='blue')
             axes[1, 1].set_xlabel('t/T [s]')
             axes[1, 1].set_ylabel('Force [mN]')
-            axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 4)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
-            axes[1, 1].legend(loc = 'upper right') 
+            axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM_g)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 4)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM_g)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
+            axes[1, 1].legend(loc = 'lower right') 
 
             # #qsm force components in global reference frame
             # plt.figure()
@@ -997,10 +1028,10 @@ def main(cfd_run, folder_name):
             plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
             # plt.subplot_tool()
             # plt.show()
-            plt.savefig(folder_name+'/figure2.png', dpi=300)
+            plt.savefig(folder_name+'/forces_figure.png', dpi=300)
 
             # generatePlotsForKinematicsSequence()
-        return K
+        return K_forces
 
     #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
     #for what x_0 values/input this minimum is attained  
@@ -1061,6 +1092,7 @@ def main(cfd_run, folder_name):
     # with open('debug/profile.txt', 'w+') as f:
     #     f.write(s.getvalue())
 
+    #cost_moments is defined in terms of the moments. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM moments to their CFD counterparts  
     def cost_moments(x, show_plots=False):
         nonlocal M_CFD_w, F_QSM_w, F_QSM_g, lever_w_average, rots_wing_w
 
@@ -1081,16 +1113,15 @@ def main(cfd_run, folder_name):
         My_QSM_w[:] = -C_lever_x_w*F_QSM_w[:, 2]
         Mz_QSM_w[:] = C_lever_x_w*F_QSM_w[:, 1] - C_lever_y_w*F_QSM_w[:, 0]
 
-
         # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
-        K2_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) + np.linalg.norm(My_QSM_w - M_CFD_w[:,1]) + np.linalg.norm(Mz_QSM_w - M_CFD_w[:,2]) 
-        K2_den = np.linalg.norm(M_CFD_w[:,0]) + np.linalg.norm(M_CFD_w[:,1]) + np.linalg.norm(M_CFD_w[:,2]) 
+        K_moments_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) + np.linalg.norm(My_QSM_w - M_CFD_w[:,1]) + np.linalg.norm(Mz_QSM_w - M_CFD_w[:,2]) 
+        K_moments_den = np.linalg.norm(M_CFD_w[:,0]) + np.linalg.norm(M_CFD_w[:,1]) + np.linalg.norm(M_CFD_w[:,2]) 
         
-        if K2_den != 0: 
-            K2 = K2_num/K2_den
+        if K_moments_den != 0: 
+            K_moments = K_moments_num/K_moments_den
         else:
-            K2 = K2_num
+            K_moments = K_moments_num
 
         # if show_plots:
             # ##FIGURE 3
@@ -1173,8 +1204,7 @@ def main(cfd_run, folder_name):
             # # plt.subplot_tool()
             # # plt.show()
             # plt.savefig(folder_name+'/figure3.png', dpi=300)
-
-        return K2
+        return K_moments
 
     #moment optimization
     def moment_optimization():
@@ -1197,49 +1227,34 @@ def main(cfd_run, folder_name):
 
     x0_moments_optimized, K0_moments_optimized = moment_optimization()
 
+    #cost_power is defined in terms of the moments and power. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM power to its CFD counterpart
     def cost_power(x, show_plots=False):
         nonlocal Mx_QSM_w, rots_wing_w, P_CFD
 
-        #here we define the the QSM moments as: M_QSM = [ C_lever_x_w*Fz_QSM_w, -C_lever_x_w*Fz_QSM_w, C_lever_x_w*Fy_QSM_w - C_lever_y_w*F_x_QSM_w ]
-        #where C_lever_x_w and C_lever_y_w correspond to the spanwise and the chordwise locations of the lever in the wing reference frame. 
-        #vector form: C_lever_w = [C_lever_x_w, C_lever_y_w, 0]
+        #here we define the the QSM moments as: M_QSM = [ C_lever_x_w_power*Fz_QSM_w, -C_lever_x_w_power*Fz_QSM_w, C_lever_x_w_power*Fy_QSM_w - C_lever_y_w_power*F_x_QSM_w ]
+        #where C_lever_x_w_power and C_lever_y_w_power correspond to the spanwise and the chordwise locations of the lever in the wing reference frame. 
+        #vector form: C_lever_w = [C_lever_x_w_power, C_lever_y_w_power, 0]
 
-        # C_lever_x_w = x[0]
-        # C_lever_y_w = x[1]
-        
-        # # lever_w[:] = M_CFD_w[:, 0]/F_CFD_w[:, 2]
+        C_lever_x_w_power = x[0]
+        C_lever_y_w_power = x[1]
 
-        # # lever_w_average = np.average(lever_w)
-        
-        # # Mx_QSM_w_nonoptimized = lever_w_average*F_QSM_w[:, 2]
-
-        # Mx_QSM_w[:] = C_lever_y_w*F_QSM_w[:, 2]
-        # My_QSM_w[:] = -C_lever_x_w*F_QSM_w[:, 2]
-        # Mz_QSM_w[:] = C_lever_x_w*F_QSM_w[:, 1] - C_lever_y_w*F_QSM_w[:, 0]
-
+        Mx_QSM_w_power[:] = C_lever_y_w_power*F_QSM_w[:, 2]
+        My_QSM_w_power[:] = -C_lever_x_w_power*F_QSM_w[:, 2]
+        Mz_QSM_w_power[:] = C_lever_x_w_power*F_QSM_w[:, 1] - C_lever_y_w_power*F_QSM_w[:, 0]
 
         # writeArraytoFile(Mx_QSM_w, 'debug/Mx_QSM_w; '+cfd_run+rightnow+'.txt')
 
-        # K3_num = np.linalg.norm(Mx_QSM_w - M_CFD_w[:,0]) + np.linalg.norm(My_QSM_w - M_CFD_w[:,1]) + np.linalg.norm(Mz_QSM_w - M_CFD_w[:,2]) 
-        # K3_den = np.linalg.norm(M_CFD_w[:,0]) + np.linalg.norm(M_CFD_w[:,1]) + np.linalg.norm(M_CFD_w[:,2]) 
-
-        C_power_x = x[0]
-        C_power_y = x[1]
-        C_power_z = x[2]
-
         P_QSM_nonoptimized[:] = -(Mx_QSM_w[:]*rots_wing_w[:, 0].reshape(100,) + My_QSM_w[:]*rots_wing_w[:, 1].reshape(100,) + Mz_QSM_w[:]*rots_wing_w[:, 2].reshape(100,))
 
-        P_QSM[:] = -(Mx_QSM_w[:]*rots_wing_w[:, 0].reshape(100,)*C_power_x + My_QSM_w[:]*rots_wing_w[:, 1].reshape(100,)*C_power_y + Mz_QSM_w[:]*rots_wing_w[:, 2].reshape(100,)*C_power_z)
+        P_QSM[:] = -(Mx_QSM_w_power[:]*rots_wing_w[:, 0].reshape(100,) + My_QSM_w_power[:]*rots_wing_w[:, 1].reshape(100,) + Mz_QSM_w_power[:]*rots_wing_w[:, 2].reshape(100,))
 
-        # P_CFD_x = M_CFD_w[:,0]*rots_wing_w[:, 0].reshape(100,)
+        K_power_num = np.linalg.norm(P_QSM - P_CFD_interp(timeline)) 
+        K_power_den = np.linalg.norm(P_CFD_interp(timeline))
 
-        K3_num = np.linalg.norm(P_QSM - P_CFD_interp(timeline)) 
-        K3_den = np.linalg.norm(P_CFD_interp(timeline))
-
-        if K3_den != 0: 
-            K3 = K3_num/K3_den
+        if K_power_den != 0: 
+            K_power = K_power_num/K_power_den
         else:
-            K3 = K3_num
+            K_power = K_power_num
 
         if show_plots:
             ##FIGURE 4
@@ -1277,14 +1292,13 @@ def main(cfd_run, folder_name):
             plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
             # plt.subplot_tool()
             # plt.show()
-            plt.savefig(folder_name+'/figure9.png', dpi=300)
-
-        return K3
+            plt.savefig(folder_name+'/moments&power_figure.png', dpi=300)
+        return K_power
 
     #moment optimization
     def power_optimization():
-        x_0_power = [1.0, 1.0, 1.0]
-        bounds = [(-6, 6), (-6, 6),  (-6, 6)]
+        x_0_power = [1.0, 1.0]
+        bounds = [(-6, 6), (-6, 6)]
         optimize = True
         if optimize:
             start = time.time()
@@ -1304,4 +1318,4 @@ def main(cfd_run, folder_name):
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moments_optimized, [lever_w_average, K0_moments_optimized]), np.append(x0_power_optimized, K0_power_optimized)
 
-main(cfd_run, 'post-processing2')
+# main(cfd_run, 'post-processing2')
