@@ -18,14 +18,16 @@ from python_tools_master import insect_tools as it
 from python_tools_master import wabbit_tools as wt
 from debug import writeArraytoFile
 from datetime import datetime
+import time
 
+start_main = time.time()
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
 # cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
     now = datetime.now()
-    rightnow = now.strftime(" %d-%m-%Y_%I:%M:%S")+".png"
+    rightnow = now.strftime(" %d-%m-%Y_%I-%M")+".png"
 
     #global variables:
 
@@ -243,10 +245,10 @@ def main(cfd_run, folder_name):
     # print(time_max)
     # exit()
 
-    if np.round(forces_CFD[-1, 0], 1) != time_max: 
-        raise ValueError('CFD cycle number does not match that of the actual run. Check your PARAMS, forces and moments files\n')
+    # if np.round(forces_CFD[-1, 0]) != time_max: 
+    #     raise ValueError('CFD cycle number does not match that of the actual run. Check your PARAMS, forces and moments files\n')
 
-    print('The number of cycles is ', time_max, '. The forces and moments data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
+    # print('The number of cycles is ', time_max, '. The forces and moments data were however only sampled for ', np.round(t[-1]), ' cycle(s)') #a cycle is defined as 1 downstroke + 1 upstroke ; cycle duration is 1.0 seconds. 
 
     Fx_CFD_g_interp = interp1d(t, Fx_CFD_g, fill_value='extrapolate')
     Fy_CFD_g_interp = interp1d(t, Fy_CFD_g, fill_value='extrapolate')
@@ -830,22 +832,22 @@ def main(cfd_run, folder_name):
         Ild = simpson(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
         Irot = simpson(C2r(y_space), y_space) #second moment of area for rotational force calculation 
         
-        # #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
-        # Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
-        # Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
-        # Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
-        # #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
-        # #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
+        #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
+        Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
+        Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
+        Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
+        #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
+        #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
 
-        #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
-        Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
-        Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
-        Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
-        Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
-        Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
-        # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
+        # #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
+        # Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
+        # Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
+        # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
+        # Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
+        # Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
+        # # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
         # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
         for i in range(nt):
@@ -1315,6 +1317,8 @@ def main(cfd_run, folder_name):
         return x0_power_optimized, K_power_optimized
     
     x0_power_optimized, K0_power_optimized = power_optimization()
+
+    print('Whole run completed in:', round(time.time() - start_main, 4), 'seconds')
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moments_optimized, K0_moments_optimized), np.append(x0_power_optimized, K0_power_optimized)
 

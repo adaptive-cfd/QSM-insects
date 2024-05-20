@@ -22,27 +22,26 @@ import time
 
 start_main = time.time()
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
-# cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
-def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, x0_power=None):
-
+cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
+def main(cfd_run, folder_name):
     #timestamp variable for saving figures with actual timestamp 
     now = datetime.now()
-    rightnow = now.strftime(" %d-%m-%Y_%I-%M")+".png"
+    rightnow = now.strftime(" %d-%m-%Y_%I:%M:%S")+".png"
 
     #global variables:
 
-    isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'LeftWing', dtype=bool)
-    wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'WingShape', dtype=str)
+    isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
+    wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'WingShape', dtype=str)
     if 'from_file' in wingShape:
         wingShape_file = os.path.join(cfd_run, wingShape.replace('from_file::', ''))
-    time_max = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Time', 'time_max', dtype=float)
-    u_infty = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'ACM-new', 'u_mean_set', dtype=str)
+    time_max = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Time', 'time_max', dtype=float)
+    u_infty = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'ACM-new', 'u_mean_set', dtype=str)
     u_infty = u_infty.split(' ')
     u_infty = -np.float_(u_infty)
     # for component in u_infty:
     #     float(component)
     # u_infty = np.array(u_infty)
-    kinematics_file = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'FlappingMotion_right', dtype=str)
+    kinematics_file = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'FlappingMotion_right', dtype=str)
     if 'from_file' in kinematics_file:
         kinematics_file = os.path.join(cfd_run, kinematics_file.replace('from_file::', '')) 
     
@@ -241,8 +240,8 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
     #no need to read in the time again as it's the same from the forces file
     P_CFD = power_CFD[:, 1]
 
-    # print(np.round(forces_CFD[-1, 0], 1))
     # print(time_max)
+    # print(np.round(forces_CFD[-1, 0]))
     # exit()
 
     # if np.round(forces_CFD[-1, 0]) != time_max: 
@@ -832,22 +831,22 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
         Ild = simpson(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
         Irot = simpson(C2r(y_space), y_space) #second moment of area for rotational force calculation 
         
-        # #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
-        # Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
-        # Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
-        # Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
-        # #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
-        # #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
+        #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
+        Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
+        Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
+        Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
+        #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
+        #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
 
-        #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
-        Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
-        Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
-        Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
-        Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
-        Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
-        # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
+        # #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
+        # Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
+        # Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
+        # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
+        # Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
+        # Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
+        # # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
         # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
         for i in range(nt):
@@ -942,7 +941,7 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             #alphas_dt
             axes[2, 1].plot(timeline, alphas_dt_sequence)
             axes[2, 1].set_xlabel('t/T [s]')
-            axes[2, 1].set_ylabel('[˚/s]')
+            axes[2, 1].set_ylabel('[rad/s]')
             axes[2, 1].set_title('Time derivative of alpha')
             axes[2, 1].legend()
 
@@ -1040,8 +1039,9 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
 
     #optimizing using scipy.optimize.minimize which is faster
     def force_optimization():
-        x_0_forces =  [0.03161,  0.03312,  0.07465, -0.04036,  0.0634,  -0.04163, -0.00789,  0.01615]  #[30, 63,  0.0001, -378, 8, 13, 23.76, 448.9, 98.12] #initial definition of x0 following Dickinson 1999
+        x_0_forces = [-0.016051553475681216, 0.0791868574718134, 0.08772865229420933, -0.09421792464523217, 0.04930389520324862, -0.00047413222166783263, -0.0033263965876021606, -0.015901183117756162]  
         bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
+        optimize = True
         nb = 2000 #nb: number of blades 
         if optimize:
             start = time.time()
@@ -1051,7 +1051,7 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             print('Computing for: ' + str(nb) + ' blades')
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_forces_optimized = x0_forces
+            x0_forces_optimized = x_0_forces
             K_forces_optimized = ''
             print('Computing for: ' + str(nb) + ' blades')
             # cost_forces(x0_forces_optimized, nb, show_plots=True)
@@ -1066,7 +1066,7 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
     #     x_0_forces = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1, 1] #initial definition of x0 following Dickinson 1999
     #     bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
     #     nb = 1000 #nb: number of blades 
-    #     
+    #     optimize = True
     #     if optimize:
     #         start = time.time()
     #         optimization = opt.differential_evolution(cost_forces, args=(nb,), bounds=bounds, x0=x_0_forces, maxiter=100)
@@ -1209,8 +1209,9 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
 
     #moment optimization
     def moment_optimization():
-        x_0_moments = [1.0, 1.0]
+        x_0_moments = [-0.006688529546060335, 0.6162654634079002]
         bounds = [(-6, 6), (-6, 6)]
+        optimize = True
         if optimize:
             start = time.time()
             optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
@@ -1218,7 +1219,7 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             K_moments_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_moments_optimized = x0_moments
+            x0_moments_optimized = x_0_moments
             K_moments_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
         print('x0_moments_optimized:', np.round(x0_moments_optimized, 5), '\nK_moments_optimized:', K_moments_optimized)
@@ -1297,8 +1298,9 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
 
     #moment optimization
     def power_optimization():
-        x_0_power = [1.0, 1.0]
+        x_0_power = [0.00799503956169284, 0.6269588602096656]
         bounds = [(-6, 6), (-6, 6)]
+        optimize = True
         if optimize:
             start = time.time()
             optimization = opt.minimize(cost_power, bounds=bounds, x0=x_0_power)
@@ -1306,7 +1308,7 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             K_power_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_power_optimized = x0_power
+            x0_power_optimized = x_0_power
             K_power_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
         print('x0_power_optimized:', np.round(x0_power_optimized, 5), '\nK_power_optimized:', K_power_optimized)
@@ -1319,4 +1321,4 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moments_optimized, K0_moments_optimized), np.append(x0_power_optimized, K0_power_optimized)
 
-# main(cfd_run, 'post-processing2')
+main(cfd_run, 'post-processing2')

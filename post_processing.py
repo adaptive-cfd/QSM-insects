@@ -7,7 +7,7 @@ import numpy as np
 import datetime
 
 
-simulations_folder_path = '/home/nico/Documents/school/thesis/wing_motion_python/single-wing-simulations/'
+simulations_folder_path = '/Users/nico/Documents/school/thesis/wing_motion_python/single-wing-simulations/'
 
 insects_simulations = os.listdir(simulations_folder_path)
 
@@ -22,7 +22,7 @@ def make_dir(dir_name, index=0):
         # print(split)
         new = '/'.join(split[:-1])
         make_dir(new, index=index+1) 
-    new_dir = '/home/nico/Documents/GitHub/QSM-insects/'+dir_name
+    new_dir = '/Users/nico/Documents/GitHub/QSM-insects/'+dir_name
     if not os.path.exists(new_dir):
         os.mkdir(new_dir)
     return new_dir
@@ -50,7 +50,7 @@ def readArrayfromCSV(file_name):
                 header = line
             else:
                 body.append(line)
-    return header, np.array(body)
+    return header, np.array(body, dtype=float)
         
 
 # for insect_simulation in insects_simulations:
@@ -92,24 +92,30 @@ for insect_simulation in insects_simulations:
                 # print(case_study_path)
                 # exit()
                 for cfd_run in cfd_runs:
-                    post_processing_coefficients = os.path.join('/home/nico/Documents/GitHub/QSM-insects/post-processing/diptera-simulation/case_study/', cfd_run)
+                    post_processing_coefficients = os.path.join('/Users/nico/Documents/GitHub/QSM-insects/post-processing/diptera-simulation/case_study/', cfd_run)
                     cfd_run_path = os.path.join(simulations_folder_path, insect_simulation, case_study, cfd_run)
                     # print(cfd_run_path)
                     # exit()
                     if os.path.isdir(cfd_run_path):
                         folder_name = f'post-processing/{case_study}/{cfd_run}/{rightnow}'
                         post_processing_coefficients = f'post-processing/diptera-simulation/case_study/{cfd_run}/'
-                        dates = os.listdir(post_processing_coefficients)
-                        timestamps = []
-                        for date in dates: 
-                            _date = datetime.datetime.strptime(date, "%d-%m-%Y_%I-%M").timestamp()
-                            timestamps.append(_date)
-                        latest = max(timestamps)
-                        date_index = timestamps.index(latest)
-                        latest_run = dates[0]
-                        post_processing_coefficients = f'/home/nico/Documents/GitHub/QSM-insects/post-processing/diptera-simulation/case_study/{cfd_run}/{latest_run}'
-                        make_dir(folder_name)
-                        x0_forces = readArrayfromCSV(post_processing_coefficients+'/forces_coefficients.csv')[1]
-                        x0_moments = readArrayfromCSV(post_processing_coefficients+'/moment_coefficient.csv')[1]
-                        x0_power = readArrayfromCSV(post_processing_coefficients+'/power_coefficient.csv')[1]
-                        main_diptera(cfd_run_path, folder_name, False, x0_forces, x0_moments, x0_power)
+                        try:
+                            dates = os.listdir(post_processing_coefficients)
+                            timestamps = []
+                            for date in dates: 
+                                try:
+                                    _date = datetime.datetime.strptime(date, "%d-%m-%Y_%I:%M:%S").timestamp()
+                                    timestamps.append(_date)
+                                except:
+                                    timestamps.append(0)
+                            latest = max(timestamps)
+                            date_index = timestamps.index(latest)
+                            latest_run = dates[date_index]
+                            post_processing_coefficients = f'post-processing/diptera-simulation/case_study/{cfd_run}/{latest_run}'
+                            make_dir(folder_name)
+                            x0_forces = readArrayfromCSV(post_processing_coefficients+'/forces_coefficients.csv')[1].flatten()[:-1]
+                            x0_moments = readArrayfromCSV(post_processing_coefficients+'/moment_coefficient.csv')[1].flatten()[:-1]
+                            x0_power = readArrayfromCSV(post_processing_coefficients+'/power_coefficient.csv')[1].flatten()[:-1]
+                            main_diptera(cfd_run_path, folder_name, False, x0_forces, x0_moments, x0_power)
+                        except Exception as e:
+                            print(e)
