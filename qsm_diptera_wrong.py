@@ -21,7 +21,7 @@ from datetime import datetime
 
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
 # cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
-def main(cfd_run, folder_name):
+def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, x0_power=None):
 
     #timestamp variable for saving figures with actual timestamp 
     now = datetime.now()
@@ -1040,7 +1040,6 @@ def main(cfd_run, folder_name):
     def force_optimization():
         x_0_forces =  [0.03161,  0.03312,  0.07465, -0.04036,  0.0634,  -0.04163, -0.00789,  0.01615]  #[30, 63,  0.0001, -378, 8, 13, 23.76, 448.9, 98.12] #initial definition of x0 following Dickinson 1999
         bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
-        optimize = True
         nb = 2000 #nb: number of blades 
         if optimize:
             start = time.time()
@@ -1050,7 +1049,7 @@ def main(cfd_run, folder_name):
             print('Computing for: ' + str(nb) + ' blades')
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_forces_optimized = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1]
+            x0_forces_optimized = x0_forces
             K_forces_optimized = ''
             print('Computing for: ' + str(nb) + ' blades')
             # cost_forces(x0_forces_optimized, nb, show_plots=True)
@@ -1065,7 +1064,7 @@ def main(cfd_run, folder_name):
     #     x_0_forces = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1, 1] #initial definition of x0 following Dickinson 1999
     #     bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
     #     nb = 1000 #nb: number of blades 
-    #     optimize = True
+    #     
     #     if optimize:
     #         start = time.time()
     #         optimization = opt.differential_evolution(cost_forces, args=(nb,), bounds=bounds, x0=x_0_forces, maxiter=100)
@@ -1210,7 +1209,6 @@ def main(cfd_run, folder_name):
     def moment_optimization():
         x_0_moments = [1.0, 1.0]
         bounds = [(-6, 6), (-6, 6)]
-        optimize = True
         if optimize:
             start = time.time()
             optimization = opt.minimize(cost_moments, bounds=bounds, x0=x_0_moments)
@@ -1218,7 +1216,7 @@ def main(cfd_run, folder_name):
             K_moments_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_moments_optimized = [1.0]
+            x0_moments_optimized = x0_moments
             K_moments_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
         print('x0_moments_optimized:', np.round(x0_moments_optimized, 5), '\nK_moments_optimized:', K_moments_optimized)
@@ -1299,7 +1297,6 @@ def main(cfd_run, folder_name):
     def power_optimization():
         x_0_power = [1.0, 1.0]
         bounds = [(-6, 6), (-6, 6)]
-        optimize = True
         if optimize:
             start = time.time()
             optimization = opt.minimize(cost_power, bounds=bounds, x0=x_0_power)
@@ -1307,7 +1304,7 @@ def main(cfd_run, folder_name):
             K_power_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
         else:
-            x0_power_optimized = [1.0]
+            x0_power_optimized = x0_power
             K_power_optimized = ''
             # cost_moments(x0_moment_optimized, show_plots=True)
         print('x0_power_optimized:', np.round(x0_power_optimized, 5), '\nK_power_optimized:', K_power_optimized)
