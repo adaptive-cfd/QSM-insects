@@ -832,22 +832,22 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
         Ild = simpson(Cr2(y_space), y_space) #second moment of area for lift/drag calculations
         Irot = simpson(C2r(y_space), y_space) #second moment of area for rotational force calculation 
         
-        # #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
-        # Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        # Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
-        # Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
-        # Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
-        # #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
-        # #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
+        #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
+        Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
+        Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
+        Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
+        Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
+        #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
+        #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
 
-        #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
-        Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
-        Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
-        Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
-        Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
-        Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
-        # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
+        # #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
+        # Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
+        # Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
+        # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
+        # Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
+        # Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
+        # # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
         # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
         for i in range(nt):
