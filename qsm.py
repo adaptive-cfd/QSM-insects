@@ -1277,7 +1277,7 @@ def main(cfd_run, folder_name):
             ax1.plot(timeline[:], M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
             ax1.set_xlabel('t/T [s]')
             ax1.set_ylabel('Moment [mN*mm]')
-            ax1.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 4)}; My_QSM_w/My_CFD_w = {np.round(np.linalg.norm(My_QSM_w)/np.linalg.norm(M_CFD_w[:, 1]), 4)}; Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mz_QSM_w)/np.linalg.norm(M_CFD_w[:, 2]), 4)}')
+            ax1.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 4)}; My_QSM_w/My_CFD_w = {np.round(np.linalg.norm(My_QSM_w)/np.linalg.norm(M_CFD_w[:, 1]), 4)}; Mz_QSM_w/Mz_CFD_w = {np.round(np.linalg.norm(Mz_QSM_w)/np.linalg.norm(M_CFD_w[:, 2]), 4)}')
             ax1.legend()
 
             #optimized aerodynamic power
@@ -1318,4 +1318,4 @@ def main(cfd_run, folder_name):
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moments_optimized, K0_moments_optimized), np.append(x0_power_optimized, K0_power_optimized)
 
-# main(cfd_run, 'post-processing2')
+main(cfd_run, 'post-processing2')

@@ -59,4 +59,3 @@ for insect_simulation in insects_simulations:
                         writeArraytoCSV(['Cl1', 'Cl2', 'Cd1', 'Cd2', 'Crot', 'Cam1', 'Cam2', 'Crd', 'K0_forces'], forces_coefficients, folder_name+'/forces_coefficients.csv')
                         writeArraytoCSV(['C_lever_x_w (lever x-component optimized for moments)', 'Lever (lever y-component optimized for moments)', 'K0_moments'], moment_coefficient, folder_name+'/moment_coefficient.csv')
                         writeArraytoCSV(['C_lever_x_w (lever x-component optimized for power)', 'Lever (lever y-component optimized for power)', 'K0_power'],  power_coefficient, folder_name+'/power_coefficient.csv')
-                        exit()
