@@ -22,7 +22,7 @@ import time
 
 start_main = time.time()
 #different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
-# cfd_run = 'intact_wing_phi120.00_phim20.00_dTau0.05'
+cfd_run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/Bibio_marcis/'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
