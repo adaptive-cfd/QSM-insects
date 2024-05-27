@@ -13,6 +13,7 @@ from scipy.interpolate import interp1d
 import time
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
+from numpy.linalg import norm
 
 # Use kinematics.t in fit_to_CFD to avoid inconsistency for runs where kinematics have been wrongly processed
 # Use kinematics.ini for others, such as evaluating?
@@ -45,8 +46,6 @@ class QSM:
         self.planar_rot_acc_wing_g = np.zeros((nt, 3, 1))
         self.planar_rot_acc_wing_w = np.zeros((nt, 3, 1))
         self.planar_rot_acc_wing_s = np.zeros((nt, 3, 1))
-        
-        self.blade_acc_wing_w = np.zeros((nt, 3))
         
         self.us_wing_w = np.zeros((nt, 3, 1))
         self.us_wing_g = np.zeros((nt, 3, 1))
@@ -110,12 +109,8 @@ class QSM:
         self.Fwe_w = np.zeros((nt, 3))
         
         self.F_QSM_w         = np.zeros((nt, 3))
-        self.F_QSM_w_2       = np.zeros((nt, 3))
         self.F_QSM_g         = np.zeros((nt, 3))
-        self.Fz_QSM_w_vector = np.zeros((nt, 3))
-        
-        self.F_QSM_gg = np.zeros((nt, 3))
-        
+                
         self.Ftc_magnitude = np.zeros(nt)
         self.Ftd_magnitude = np.zeros(nt)
         self.Frc_magnitude = np.zeros(nt)
@@ -296,7 +291,8 @@ class QSM:
                 phis_it   = kinematics_cfd[:,12].flatten()
                 thetas_it = kinematics_cfd[:,13].flatten()
                 
-                # ???
+                # As WABBIT also computes as stores angular velocity & acceleration
+                # we can use this to verify the QSM computation done here
                 self.debug_rotx_wing_g = kinematics_cfd[:, 17].flatten()
                 self.debug_roty_wing_g = kinematics_cfd[:, 18].flatten()
                 self.debug_rotz_wing_g = kinematics_cfd[:, 19].flatten()                
@@ -310,7 +306,8 @@ class QSM:
                 phis_it   = kinematics_cfd[:,  9].flatten()
                 thetas_it = kinematics_cfd[:, 10].flatten()                
                 
-                #???
+                # As WABBIT also computes as stores angular velocity & acceleration
+                # we can use this to verify the QSM computation done here
                 self.debug_rotx_wing_g = kinematics_cfd[:, 14].flatten()
                 self.debug_roty_wing_g = kinematics_cfd[:, 15].flatten()
                 self.debug_rotz_wing_g = kinematics_cfd[:, 16].flatten()                
@@ -432,7 +429,7 @@ class QSM:
             self.planar_rots_wing_w[timeStep, :] = planar_rot_wing_w
             self.planar_rots_wing_g[timeStep, :] = planar_rot_wing_g
         
-            self.planar_rots_wing_w_magnitude = np.linalg.norm( self.planar_rots_wing_w, axis=1).reshape(nt,)
+            self.planar_rots_wing_w_magnitude = norm( self.planar_rots_wing_w, axis=1).reshape(nt,)
         
             u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), ey_wing_g.reshape(1,3)) + self.u_infty_g
             self.us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
@@ -441,7 +438,7 @@ class QSM:
             self.us_wing_w[timeStep, :] = u_wing_w
         
        
-            u_wing_g_magnitude = np.linalg.norm(u_wing_g)
+            u_wing_g_magnitude = norm(u_wing_g)
             self.us_wing_g_magnitude[timeStep] = u_wing_g_magnitude
         
             if u_wing_g_magnitude != 0:  
@@ -492,8 +489,21 @@ class QSM:
             
 
             
-    def fit_to_CFD(self, cfd_run, paramsfile, T0=0.0):
+    def fit_to_CFD(self, cfd_run, paramsfile, T0=0.0, optimize=True):
+        """
+        Train the QSM model with a CFD run. This works only if you have initialized 
+            * the kinematics with parse_kinematics_file
+            * the wing shape with setup_wing_shape
+        before calling this routine. 
         
+        The routine reads the CFD data from the given directory cfd_run, and uses
+        the given parameter file (often called PARAMS.ini or similar).
+        
+        We train the QSM model to a single wing currently. If you try to process a two-winged
+        simulation, an error is raised.
+        
+        The optimized coefficients are stored in the QSM object.
+        """
         
         self.time_max = wt.get_ini_parameter(paramsfile, 'Time', 'time_max', dtype=float)
 
@@ -520,6 +530,7 @@ class QSM:
         time_start, time_end = d[0,0], d[-1,0]
         print("CFD data t=[%f, %f]" % (time_start, time_end))
         print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
+        self.timeline -= self.timeline[0]
         self.timeline += T0
         
 
@@ -577,35 +588,31 @@ class QSM:
         def cost_forces( x, self, show_plots=False):            
             Cl, Cd, Crot, Cam1, Cam2, Crd = getAerodynamicCoefficients(x, self.AoA)
 
-            rho = 1.225
+    
+            rho = 1.225 # for future work, can also be set to 1.0 simply
             nt = self.nt
 
-            #both Cl and Cd are of shape (nt, 1), this however poses a dimensional issue when the magnitude of the lift/drag force is to be multiplied
-            #with their corresponding vectors. to fix this, we reshape Cl and Cd to be of shape (nt,)
+            # both Cl and Cd are of shape (nt, 1), this however poses a dimensional issue when the magnitude of the lift/drag force is to be multiplied
+            # with their corresponding vectors. to fix this, we reshape Cl and Cd to be of shape (nt,)
             Cl = Cl.reshape(nt,) 
             Cd = Cd.reshape(nt,)
-            # AoA = self.AoA.reshape(nt,)
             
+            # these are either precomputed from the wing shape or simply set to one.
+            # The model can do without, as the optimizer simply adjusts the coefficients 
+            # accordingly.
             Iam = self.Iam
             Iwe = self.Iwe
             Ild = self.Ild
             Irot = self.Irot
         
             
-            #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
+            # calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
             self.Ftc_magnitude = 0.5*rho*Cl*(self.planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
             self.Ftd_magnitude = 0.5*rho*Cd*(self.planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
             self.Frc_magnitude = rho*Crot*self.planar_rots_wing_w_magnitude*self.alphas_dt*Irot #Nakata et al. 2015
             self.Fam_magnitude = -Cam1*rho*np.pi/4*Iam*self.acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*self.rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
             self.Frd_magnitude = -1/6*rho*Crd*np.abs(self.alphas_dt)*self.alphas_dt#Cai et al. 2021
  
-            # #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
-            # Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
-            # Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
-            # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
-            # Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
-            # Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
-            # # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
             # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
             for i in range(nt):
@@ -616,13 +623,12 @@ class QSM:
                 self.Frd[i, :] = (self.Frd_magnitude[i] * self.ez_wing_g_sequence[i])
                 self.Fwe[i, :] = (self.Fwe_magnitude[i] * self.ez_wing_g_sequence[i])
 
+            # total force generated by QSM
             self.Fx_QSM_g = self.Ftc[:, 0] + self.Ftd[:, 0] + self.Frc[:, 0] + self.Fam[:, 0] + self.Frd[:, 0] + self.Fwe[:, 0]
             self.Fy_QSM_g = self.Ftc[:, 1] + self.Ftd[:, 1] + self.Frc[:, 1] + self.Fam[:, 1] + self.Frd[:, 1] + self.Fwe[:, 1]
             self.Fz_QSM_g = self.Ftc[:, 2] + self.Ftd[:, 2] + self.Frc[:, 2] + self.Fam[:, 2] + self.Frd[:, 2] + self.Fwe[:, 2]
 
             self.F_QSM_g[:] = self.Ftc + self.Ftd + self.Frc + self.Fam + self.Frd + self.Fwe  
-
-            norm = np.linalg.norm
 
             K_forces_num = norm(self.Fx_QSM_g-self.Fx_CFD_g) + norm(self.Fz_QSM_g-self.Fz_CFD_g)
             K_forces_den = norm(self.Fx_CFD_g) + norm(self.Fz_CFD_g)
@@ -636,7 +642,6 @@ class QSM:
                 self.F_QSM_w[i, :] = np.matmul( self.rotationMatrix_g_to_w[i, :], self.F_QSM_g[i, :])
 
             if show_plots:
-
                 ##FIGURE 1
                 fig, axes = plt.subplots(3, 2, figsize = (15, 15))
 
@@ -775,21 +780,18 @@ class QSM:
 
                 plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
                 # plt.subplot_tool()
-                # plt.show()
-                # plt.savefig(folder_name+'/forces_figure.png', dpi=300)
-
-                # generatePlotsForKinematicsSequence()
+                
             return K_forces
         
         #----------------------------------------------------------------------
         # optimizing using scipy.optimize.minimize which is faster
         
-        bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
-        optimize = True
-        K_forces = 9e9
-        
         if optimize:
             start = time.time()
+            
+            bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
+            K_forces = 9e9
+
             
             # optimize 3 times from a different initial guess, use best solution found
             # NOTE: tests indicate the system always finds the same solution, so this could
@@ -803,15 +805,14 @@ class QSM:
                 if optimization.fun < K_forces:
                     K_forces = optimization.fun
                     x0_best = x0_forces                
+                    
+            self.x0_forces = x0_best     
+            self.K_forces = K_forces
             
             print('Completed in:', round(time.time() - start, 4), 'seconds')
-        else:
-            x0_forces = [0.225, 1.58,  1.92, -1.55, 1, 1, 1, 1]
-            K_forces = ''
+            print('x0_optimized:', np.round(self.x0_forces, 5), '\nK_optimized_forces:', K_forces)
             
-        x0_forces = x0_best            
-        print('x0_optimized:', np.round(x0_best, 5), '\nK_optimized_forces:', K_forces)
-        cost_forces(x0_forces, self, show_plots=True)
+        cost_forces(self.x0_forces, self, show_plots=True)
         
         #%% moments optimization
         
@@ -828,8 +829,6 @@ class QSM:
             self.My_QSM_w[:] = -C_lever_x_w*self.F_QSM_w[:, 2]
             self.Mz_QSM_w[:] =  C_lever_x_w*self.F_QSM_w[:, 1] - C_lever_y_w*self.F_QSM_w[:, 0]
 
-            norm = np.linalg.norm
-
             K_moments_num = norm(self.Mx_QSM_w - self.M_CFD_w[:,0]) + norm(self.My_QSM_w - self.M_CFD_w[:,1]) + norm(self.Mz_QSM_w - self.M_CFD_w[:,2]) 
             K_moments_den = norm(self.M_CFD_w[:,0]) + norm(self.M_CFD_w[:,1]) + norm(self.M_CFD_w[:,2]) 
             
@@ -840,28 +839,24 @@ class QSM:
 
             return K_moments
 
-        #moment optimization
-
-        x0_moments = [1.0, 1.0]
-        bounds = [(-6, 6), (-6, 6)]
-        optimize = True
-        
+        # moment optimization
         if optimize:
+            x0_moments = [1.0, 1.0]
+            bounds = [(-6, 6), (-6, 6)]
+
             start = time.time()
             
             optimization = opt.minimize(cost_moments, args=(self, False), bounds=bounds, x0=x0_moments)
             
-            x0_moments = optimization.x
-            K_moments= optimization.fun
+            self.x0_moments = optimization.x
+            self.K_moments  = optimization.fun
             
             print('Completed in:', round(time.time() - start, 4), 'seconds')
-        else:
-            x0_moments_optimized = [1.0]
-            K_moments_optimized = ''
             
-        print('x0_moments_optimized:', np.round(x0_moments, 5), '\nK_moments_optimized:', K_moments)
-        cost_moments(x0_moments, self, True)
-            
+            print('x0_moments_optimized:', np.round(self.x0_moments, 5), '\nK_moments_optimized:', self.K_moments)
+        cost_moments(self.x0_moments, self, True)
+
+
 
 
         #%% power optimization
@@ -888,8 +883,8 @@ class QSM:
                          + self.My_QSM_w_power*self.rots_wing_w[:, 1].flatten() 
                          + self.Mz_QSM_w_power*self.rots_wing_w[:, 2].flatten())
 
-            K_power_num = np.linalg.norm(self.P_QSM - self.P_CFD) 
-            K_power_den = np.linalg.norm(self.P_CFD)
+            K_power_num = norm(self.P_QSM - self.P_CFD) 
+            K_power_den = norm(self.P_CFD)
 
             if K_power_den != 0: 
                 K_power = K_power_num/K_power_den
@@ -928,22 +923,19 @@ class QSM:
             return K_power
 
         # power optimization
-        x_0_power = [1.0, 1.0]
-        bounds = [(-6, 6), (-6, 6)]
-        optimize = True
-        if optimize:
+        if optimize:            
+            x0_power = [1.0, 1.0]
+            bounds = [(-6, 6), (-6, 6)]
+
             start = time.time()
-            optimization = opt.minimize(cost_power, args=(self, False), bounds=bounds, x0=x_0_power)
-            x0_power = optimization.x
-            K_power = optimization.fun
+            optimization = opt.minimize(cost_power, args=(self, False), bounds=bounds, x0=x0_power)
+            self.x0_power = optimization.x
+            self.K_power = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
-        else:
-            x0_power_optimized = [1.0]
-            K_power_optimized = ''
-            # cost_moments(x0_moment_optimized, show_plots=True)
             
-        print('x0_power:', np.round(x0_power, 5), '\nK_power_optimized:', K_power)
-        cost_power(x0_power, self, show_plots=True)
+            print('x0_power:', np.round(self.x0_power, 5), '\nK_power_optimized:', self.K_power)
+            
+        cost_power(self.x0_power, self, show_plots=True)
             
 
     def setup_wing_shape(self, wingShape_file, nb=1000):

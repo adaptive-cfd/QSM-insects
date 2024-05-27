@@ -11,14 +11,21 @@ import wabbit_tools
 import numpy as np
 import matplotlib.pyplot as plt
 
+species = "Chaoborus_flavicans"
+
 plt.close('all')
-
-run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/Bibio_marcis/'
+run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi80.00_phim5.00_dTau0.05/'
+# run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
 QSM = qsm_class.QSM()
-QSM.setup_wing_shape(run+'WING_Bibio_marcis.ini')
-QSM.parse_kinematics(run+'PARAMS_diptera.ini', run+'kinematics.t')
-QSM.fit_to_CFD(run, run+'PARAMS_diptera.ini', T0=1.0)
+QSM.setup_wing_shape(run+'WING_musca_noAlula.ini')
+QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
+QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=True)
 
+plt.close('all')
+run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi110.00_phim5.00_dTau0.05/'
+# run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
+QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
+QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=False)
 
 # plt.figure()
 # plt.plot(QSM.timeline, QSM.acc_wing_g[:,0])
