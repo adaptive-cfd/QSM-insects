@@ -2,9 +2,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-post-processing/
+post-processing
 .vscode
-post-processing_absorbed/
-post-processing2/
-
+post-processing_absorbed
+post-processing2
+debug
+debug_images
 qsm_old.py
+convergence.py
+python_tools_master
+post_processing.py
+debug.py
