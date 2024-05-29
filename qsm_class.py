@@ -64,22 +64,22 @@ class QSM:
         self.liftVectors = np.zeros((nt, 3))
         self.e_liftVectors_g = np.zeros((nt, 3))
         
-        self.ey_wing_g_sequence = np.zeros((nt, 3))
-        self.ez_wing_g_sequence = np.zeros((nt, 3))
+        self.ey_wing_g = np.zeros((nt, 3))
+        self.ez_wing_g = np.zeros((nt, 3))
         
-        self.ey_wing_s_sequence = np.zeros((nt, 3))
+        self.ey_wing_s = np.zeros((nt, 3))
         
-        self.ey_wing_w_sequence = np.zeros((nt, 3))
-        self.ez_wing_w_sequence = np.zeros((nt, 3))
+        self.ey_wing_w = np.zeros((nt, 3))
+        self.ez_wing_w = np.zeros((nt, 3))
         
         self.e_Fam = np.zeros((nt, 3))
         
-        self.wingRotationMatrix_sequence = np.zeros((nt, 3, 3))
-        self.wingRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
-        self.strokeRotationMatrix_sequence = np.zeros((nt, 3, 3))
-        self.strokeRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
-        self.bodyRotationMatrix_sequence = np.zeros((nt, 3, 3))
-        self.bodyRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
+        self.wingRotationMatrix = np.zeros((nt, 3, 3))
+        self.wingRotationMatrixTrans = np.zeros((nt, 3, 3))
+        self.strokeRotationMatrix = np.zeros((nt, 3, 3))
+        self.strokeRotationMatrixTrans = np.zeros((nt, 3, 3))
+        self.bodyRotationMatrix = np.zeros((nt, 3, 3))
+        self.bodyRotationMatrixTrans = np.zeros((nt, 3, 3))
         
         self.rotationMatrix_g_to_w = np.zeros((nt, 3, 3))
         self.rotationMatrix_w_to_g = np.zeros((nt, 3, 3))
@@ -387,12 +387,12 @@ class QSM:
             self.bodyPointsSequence[timeStep, :]   = bodyPoints
             self.globalPointsSequence[timeStep, :] = globalPoints
         
-            self.wingRotationMatrix_sequence[timeStep, :]        = wingRotationMatrix
-            self.wingRotationMatrixTrans_sequence[timeStep, :]   = wingRotationMatrixTrans
-            self.strokeRotationMatrix_sequence[timeStep, :]      = strokeRotationMatrix
-            self.strokeRotationMatrixTrans_sequence[timeStep, :] = strokeRotationMatrixTrans
-            self.bodyRotationMatrix_sequence[timeStep, :]        = bodyRotationMatrix
-            self.bodyRotationMatrixTrans_sequence[timeStep, :]   = bodyRotationMatrixTrans
+            self.wingRotationMatrix[timeStep, :]        = wingRotationMatrix
+            self.wingRotationMatrixTrans[timeStep, :]   = wingRotationMatrixTrans
+            self.strokeRotationMatrix[timeStep, :]      = strokeRotationMatrix
+            self.strokeRotationMatrixTrans[timeStep, :] = strokeRotationMatrixTrans
+            self.bodyRotationMatrix[timeStep, :]        = bodyRotationMatrix
+            self.bodyRotationMatrixTrans[timeStep, :]   = bodyRotationMatrixTrans
         
             self.rotationMatrix_g_to_w[timeStep, :] = np.matmul(wingRotationMatrix, np.matmul(strokeRotationMatrix, bodyRotationMatrix))
             # ??? should just be the transpose of previous line???
@@ -406,15 +406,15 @@ class QSM:
         
             ey_wing_s = np.matmul(wingRotationMatrixTrans, np.array([[0], [1], [0]]))
         
-            self.ey_wing_g_sequence[timeStep, :] = ey_wing_g.flatten()
-            self.ez_wing_g_sequence[timeStep, :] = ez_wing_g.flatten()
+            self.ey_wing_g[timeStep, :] = ey_wing_g.flatten()
+            self.ez_wing_g[timeStep, :] = ez_wing_g.flatten()
         
-            self.ey_wing_s_sequence[timeStep, :] = ey_wing_s.reshape(3,)
+            self.ey_wing_s[timeStep, :] = ey_wing_s.reshape(3,)
         
             ey_wing_w = np.array([[0], [1], [0]])
             ez_wing_w = np.array([[0], [0], [1]])
-            self.ey_wing_w_sequence[timeStep, :] = ey_wing_w.reshape(3,)
-            self.ez_wing_w_sequence[timeStep, :] = ez_wing_w.reshape(3,)
+            self.ey_wing_w[timeStep, :] = ey_wing_w.reshape(3,)
+            self.ez_wing_w[timeStep, :] = ez_wing_w.reshape(3,)
         
             rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(
                 wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], 
@@ -623,10 +623,10 @@ class QSM:
             for i in range(nt):
                 self.Ftc[i, :] = (self.Ftc_magnitude[i] * self.e_liftVectors_g[i])
                 self.Ftd[i, :] = (self.Ftd_magnitude[i] * self.e_dragVectors_wing_g[i])
-                self.Frc[i, :] = (self.Frc_magnitude[i] * self.ez_wing_g_sequence[i])
-                self.Fam[i, :] = (self.Fam_magnitude[i] * self.ez_wing_g_sequence[i])
-                self.Frd[i, :] = (self.Frd_magnitude[i] * self.ez_wing_g_sequence[i])
-                self.Fwe[i, :] = (self.Fwe_magnitude[i] * self.ez_wing_g_sequence[i])
+                self.Frc[i, :] = (self.Frc_magnitude[i] * self.ez_wing_g[i])
+                self.Fam[i, :] = (self.Fam_magnitude[i] * self.ez_wing_g[i])
+                self.Frd[i, :] = (self.Frd_magnitude[i] * self.ez_wing_g[i])
+                self.Fwe[i, :] = (self.Fwe_magnitude[i] * self.ez_wing_g[i])
 
             # total force generated by QSM
             self.Fx_QSM_g = self.Ftc[:, 0] + self.Ftd[:, 0] + self.Frc[:, 0] + self.Fam[:, 0] + self.Frd[:, 0] + self.Fwe[:, 0]
