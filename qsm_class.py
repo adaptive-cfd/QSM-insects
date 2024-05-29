@@ -530,13 +530,15 @@ class QSM:
         time_start, time_end = d[0,0], d[-1,0]
         print("CFD data t=[%f, %f]" % (time_start, time_end))
         print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
-        self.timeline -= self.timeline[0]
-        self.timeline += T0
         
-
-        forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', interp=True, time_out=self.timeline)
-        moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+wing+'wing.t', interp=True, time_out=self.timeline)
-            
+        # read in data from desired cycle (hence the shift by T0)
+        # NOTE that load_t_file can remove outliers in the data, which turned out very useful for the 
+        # musca domestica data (which have large jumps exactly at the reversals)
+        forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
+        moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
+        # ??? ATTENTION power is for the entire animal (two wings), if that has been computed
+        # It's only the power for one wing if only one is computed
+        power_CFD = insect_tools.load_t_file(cfd_run+'/aero_power.t', interp=True, time_out=self.timeline+T0)           
             
         self.Fx_CFD_g = forces_CFD[:, 1]
         self.Fy_CFD_g = forces_CFD[:, 2]
@@ -549,10 +551,6 @@ class QSM:
         self.F_CFD_g = np.vstack((self.Fx_CFD_g, self.Fy_CFD_g, self.Fz_CFD_g)).transpose()
         self.M_CFD_g = np.vstack((self.Mx_CFD_g, self.My_CFD_g, self.Mz_CFD_g)).transpose()
 
-            
-        # ??? ATTENTION power is for the entire animal (two wings), if that has been computed
-        # It's only the power for one wing if only one is computed
-        power_CFD = insect_tools.load_t_file(cfd_run+'/aero_power.t', interp=True, time_out=self.timeline)
         self.P_CFD = power_CFD[:, 1]
                
         # computation of M_CFD_w and F_CFD_w
@@ -563,6 +561,13 @@ class QSM:
             self.M_CFD_w[i, :] = np.matmul(self.rotationMatrix_g_to_w[i, :], self.M_CFD_g[i, :])  
             self.F_CFD_w[i, :] = np.matmul(self.rotationMatrix_g_to_w[i, :], self.F_CFD_g[i, :])
             
+        self.Fx_CFD_w = self.F_CFD_w[:,0]
+        self.Fy_CFD_w = self.F_CFD_w[:,1]
+        self.Fz_CFD_w = self.F_CFD_w[:,2]
+
+        self.Mx_CFD_w = self.M_CFD_w[:,0]
+        self.My_CFD_w = self.M_CFD_w[:,1]
+        self.Mz_CFD_w = self.M_CFD_w[:,2]            
             
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
@@ -584,7 +589,7 @@ class QSM:
         
         #%% force optimization
 
-        #cost function which tells us how far off our QSM values are from the CFD ones for the forces
+        # cost function which tells us how far off our QSM values are from the CFD ones for the forces
         def cost_forces( x, self, show_plots=False):            
             Cl, Cd, Crot, Cam1, Cam2, Crd = getAerodynamicCoefficients(x, self.AoA)
 
@@ -650,16 +655,16 @@ class QSM:
                 axes[0, 0].plot(self.timeline, np.degrees(self.alphas), label ='⍺')
                 axes[0, 0].plot(self.timeline, np.degrees(self.thetas), label='Θ')
                 axes[0, 0].plot(self.timeline, np.degrees(self.AoA), label='AoA', color = 'purple')
-                axes[0, 0].set_xlabel('t/T [s]')
+                axes[0, 0].set_xlabel('t/T')
                 axes[0, 0].set_ylabel('[˚]')
-                axes[0, 0].legend(loc = 'upper right') 
+                axes[0, 0].legend() 
 
                 #u_wing_w (tip velocity in wing reference frame )
                 axes[0, 1].plot(self.timeline, self.us_wing_w[:, 0], label='u_x_wing_w')
                 axes[0, 1].plot(self.timeline, self.us_wing_w[:, 1], label='u_y_wing_w')
                 axes[0, 1].plot(self.timeline, self.us_wing_w[:, 2], label='u_z_wing_w')
-                axes[0, 1].set_xlabel('t/T [s]')
-                axes[0, 1].set_ylabel('[mm/s]')
+                axes[0, 1].set_xlabel('t/T')
+                axes[0, 1].set_ylabel('[Rf]')
                 axes[0, 1].set_title('Tip velocity in wing reference frame')
                 axes[0, 1].legend()
 
@@ -667,8 +672,8 @@ class QSM:
                 axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 0], label='a_x_wing_w')
                 axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 1], label='a_y_wing_w')
                 axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 2], label='a_z_wing_w')
-                axes[1, 0].set_xlabel('t/T [s]')
-                axes[1, 0].set_ylabel('[mm/s²]')
+                axes[1, 0].set_xlabel('t/T')
+                axes[1, 0].set_ylabel('[Tf^2]')
                 axes[1, 0].set_title('Tip acceleration in wing reference frame')
                 axes[1, 0].legend()
 
@@ -676,8 +681,8 @@ class QSM:
                 axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 0], label='rot_x_wing_w')
                 axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 1], label='rot_y_wing_w')
                 axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 2], label='rot_z_wing_w')
-                axes[1, 1].set_xlabel('t/T [s]')
-                axes[1, 1].set_ylabel('rad/s')
+                axes[1, 1].set_xlabel('t/T')
+                axes[1, 1].set_ylabel('rad/T')
                 axes[1, 1].set_title('Angular velocity in wing reference frame')
                 axes[1, 1].legend()
 
@@ -685,22 +690,23 @@ class QSM:
                 axes[2, 0].plot(self.timeline, self.rot_acc_wing_w[:, 0], label='rot_acc_x_wing_w')
                 axes[2, 0].plot(self.timeline, self.rot_acc_wing_w[:, 1], label='rot_acc_y_wing_w')
                 axes[2, 0].plot(self.timeline, self.rot_acc_wing_g[:, 2], label='rot_acc_z_wing_w')
-                axes[2, 0].set_xlabel('t/T [s]')
-                axes[2, 0].set_ylabel('[rad/s]²')
+                axes[2, 0].set_xlabel('t/T')
+                axes[2, 0].set_ylabel('[rad/T²]')
                 axes[2, 0].set_title('Angular acceleration in wing reference frame')
                 axes[2, 0].legend()
 
                 #alphas_dt
                 axes[2, 1].plot(self.timeline, self.alphas_dt)
-                axes[2, 1].set_xlabel('t/T [s]')
-                axes[2, 1].set_ylabel('[˚/s]')
+                axes[2, 1].set_xlabel('t/T')
+                axes[2, 1].set_ylabel('[˚/T]')
                 axes[2, 1].set_title('Time derivative of alpha')
                 axes[2, 1].legend()
 
-                plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
-                # plt.subplot_tool()
-                # plt.show()
-                # plt.savefig(folder_name+'/kinematics_figure.png', dpi=300)
+                plt.tight_layout()
+                plt.draw()
+                
+                for ax in axes.flatten():
+                    insect_tools.indicate_strokes(ax=ax)
                 
                 ##FIGURE 2
                 fig, axes = plt.subplots(2, 2, figsize = (15, 10))
@@ -713,7 +719,7 @@ class QSM:
                 # ax.plot(np.degrees(graphAoA), gCrot*np.ones_like(gCl), label='Crot')
                 axes[0, 0].set_title('Lift and drag coeffficients') 
                 axes[0, 0].set_xlabel('AoA[°]')
-                axes[0, 0].set_ylabel('[]')
+                axes[0, 0].set_ylabel('[-]')
                 axes[0, 0].legend(loc = 'upper right') 
 
                 #vertical forces
@@ -725,25 +731,11 @@ class QSM:
                 # axes[0, 1].plot(timeline, Fwe[:, 2], label = 'Vertical wagner effect force')
                 axes[0, 1].plot(self.timeline, self.Fz_QSM_g, label = 'Vertical QSM force', ls='-.', color='blue')
                 axes[0, 1].plot(self.timeline, self.Fz_CFD_g, label = 'Vertical CFD force', ls='--', color='purple')
-                axes[0, 1].set_xlabel('t/T [s]')
-                axes[0, 1].set_ylabel('Force [mN]')
+                axes[0, 1].set_xlabel('t/T')
+                axes[0, 1].set_ylabel('force')
                 axes[0, 1].set_title('Vertical components of forces in global coordinate system')
                 axes[0, 1].legend(loc = 'lower right')
             
-                # #vertical forces_w
-                # plt.figure() 
-                # plt.plot(timeline, Ftc[:, 2], label = 'Vertical lift force_w', color='gold')
-                # plt.plot(timeline, Frc_w[:, 2], label = 'Vertical rotational force_w', color='orange')
-                # plt.plot(timeline, Ftd_w[:, 2], label = 'Vertical drag force_w', color='lightgreen')
-                # plt.plot(timeline, Fam_w[:, 2], label = 'Vertical added mass force_w', color='red')
-                # plt.plot(timeline, Frd_w[:, 2], label = 'Vertical rotational drag force_w', color='green')
-                # # plt.plot(timeline, Fwe_w[:, 2], label = 'Vertical wagner effect force_w')
-                # plt.plot(timeline, F_QSM_w[:, 2], label = 'Vertical QSM force_w' , color='blue')
-                # plt.xlabel('t/T [s]')
-                # plt.ylabel('Force [mN]')
-                # plt.legend()
-                # plt.show()
-
                 #qsm + cfd force components in wing reference frame
                 axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 0], label='Fx_QSM_w', c='r')
                 axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
@@ -751,8 +743,8 @@ class QSM:
                 axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
                 axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
                 axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
-                axes[1, 0].set_xlabel('t/T [s]')
-                axes[1, 0].set_ylabel('Force [mN]')
+                axes[1, 0].set_xlabel('t/T')
+                axes[1, 0].set_ylabel('force')
                 axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
                 axes[1, 0].legend()
 
@@ -763,23 +755,20 @@ class QSM:
                 axes[1, 1].plot(self.timeline[:], self.Fy_CFD_g, label='Fy_CFD_g', linestyle = 'dashed', color='green')
                 axes[1, 1].plot(self.timeline[:], self.Fz_QSM_g, label='Fz_QSM_g', color='blue')            
                 axes[1, 1].plot(self.timeline[:], self.Fz_CFD_g, label='Fz_CFD_g', linestyle = 'dashed', color='blue')
-                axes[1, 1].set_xlabel('t/T [s]')
-                axes[1, 1].set_ylabel('Force [mN]')
-                # axes[1, 1].set_title(f'Fx_QSM_g/Fx_CFD_g = {np.round(np.linalg.norm(Fx_QSM_g)/np.linalg.norm(Fx_CFD_g_interp(timeline)), 4)}; Fz_QSM_g/Fz_CFD_g = {np.round(np.linalg.norm(Fz_QSM_g)/np.linalg.norm(Fz_CFD_g_interp(timeline)), 3)}')
+                axes[1, 1].set_xlabel('t/T')
+                axes[1, 1].set_ylabel('force')
+                axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.3f" % (norm(self.Fx_QSM_g)/norm(self.Fx_CFD_g), 
+                                                                                    norm(self.Fy_QSM_g)/norm(self.Fy_CFD_g), 
+                                                                                    norm(self.Fz_QSM_g)/norm(self.Fz_CFD_g),
+                                                                                    K_forces) ) 
                 axes[1, 1].legend(loc = 'lower right') 
 
-                # #qsm force components in global reference frame
-                # plt.figure()
-                # plt.plot(timeline, F_QSM_g[:, 0], label='Fx_g')
-                # plt.plot(timeline, F_QSM_g[:, 1], label='Fy_g')
-                # plt.plot(timeline, F_QSM_g[:, 2], label='Fz_g')
-                # plt.xlabel('t/T [s]')
-                # plt.ylabel('Force [mN]')
-                # plt.legend()
-                # plt.show()
 
-                plt.subplots_adjust(left=0.07, bottom=0.05, right=0.960, top=0.970, wspace=0.185, hspace=0.28)
-                # plt.subplot_tool()
+                for ax in axes.flatten()[1:]:
+                    insect_tools.indicate_strokes(ax=ax)
+
+                plt.tight_layout()
+                plt.draw()
                 
             return K_forces
         
@@ -902,24 +891,27 @@ class QSM:
                 ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='-.', color='blue')
                 ax1.plot(self.timeline, self.Mz_QSM_w, label='Mz_QSM_w', color='green')
                 ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
-                ax1.set_xlabel('t/T [s]')
-                ax1.set_ylabel('Moment [mN*mm]')
-                # ax1.set_title(f'Mx_QSM_w/Mx_CFD_w = {np.round(np.linalg.norm(Mx_QSM_w)/np.linalg.norm(M_CFD_w[:, 0]), 4)}; My_QSM_w/My_CFD_w = {np.round(np.linalg.norm(My_QSM_w)/np.linalg.norm(M_CFD_w[:, 1]), 4)}; Mz_QSM_w/Mz_CFD_w = {np.round(np.linalg.norm(Mz_QSM_w)/np.linalg.norm(M_CFD_w[:, 2]), 4)}')
+                ax1.set_xlabel('t/T')
+                ax1.set_ylabel('moment]')                
+                ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.Mx_QSM_w)/norm(self.Mx_CFD_w), 
+                                                                            norm(self.My_QSM_w)/norm(self.My_CFD_w), 
+                                                                            norm(self.Mz_QSM_w)/norm(self.Mz_CFD_w)) ) 
                 ax1.legend()
 
                 #optimized aerodynamic power
                 ax2.plot(self.timeline, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
                 ax2.plot(self.timeline, self.P_QSM, label='P_QSM (optimized)', color='b')
                 ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='indigo')
-                ax2.set_xlabel('t/T [s]')
-                ax2.set_ylabel('Power [mN*mm/s]')
-                # ax2.set_title(f'P_QSM/P_CFD = {np.round(np.linalg.norm(P_QSM)/np.linalg.norm(P_CFD_interp(timeline)), 4)}')
+                ax2.set_xlabel('t/T')
+                ax2.set_ylabel('aerodynamic power')
+                ax2.set_title("K_power=%3.3f" % (K_power) )
                 ax2.legend()
-
-                plt.subplots_adjust(top=0.97, bottom=0.05, left=0.15, right=0.870, hspace=0.28, wspace=0.185)
-                # plt.subplot_tool()
-                # plt.show()
-                # plt.savefig(folder_name+'/moments&power_figure.png', dpi=300)
+                plt.tight_layout()
+                plt.draw()
+                
+                insect_tools.indicate_strokes(ax=ax1)
+                insect_tools.indicate_strokes(ax=ax2)
+                
             return K_power
 
         # power optimization
