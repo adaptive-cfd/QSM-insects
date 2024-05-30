@@ -13,3 +13,5 @@ convergence.py
 python_tools_master
 post_processing.py
 debug.py
+post_analysis.py
+.DS_Store
