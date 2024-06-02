@@ -129,7 +129,7 @@ class QSM:
         self.isLeft = 1
         
         
-    def parse_kinematics(self, params_file, kinematics_file, plot=True):
+    def parse_kinematics(self, params_file, kinematics_file, plot=True, wing='auto'):
         """
         Evaluate the kinematics given by kinematics_file and store the results
         in the class arrays. The kinematics file can be either: 
@@ -264,14 +264,21 @@ class QSM:
             return AoA
         
         # left or right wing?
-        self.isLeft   = wt.get_ini_parameter(params_file, 'Insects', 'LeftWing', dtype=bool)
-        self.isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
+        if wing == 'auto':
+            # read from PARAMS-file; this is the default. If we use QSM on a two (or four) winged simulation,
+            # we create one QSM model for each wing.
+            self.isLeft   = wt.get_ini_parameter(params_file, 'Insects', 'LeftWing', dtype=bool)
+            self.isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
+        elif wing == 'left':
+            self.isLeft, self.isRight = 1, 0
+        elif wing == 'right':
+            self.isLeft, self.isRight = 0, 1
         # insects cruising speed        
         self.u_infty_g = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
         
         if "kinematics.t" in kinematics_file:
             # load kinematics data by means of load_t_file function from insect_tools library 
-            kinematics_cfd = insect_tools.load_t_file(kinematics_file)#, interp=True, time_out=self.timeline)
+            kinematics_cfd = insect_tools.load_t_file(kinematics_file)#, remove_outliers=True)#, interp=True, time_out=self.timeline)
             time_it   = kinematics_cfd[:, 0].flatten()
             psis_it   = kinematics_cfd[:, 4].flatten()
             betas_it  = kinematics_cfd[:, 5].flatten()
@@ -309,7 +316,7 @@ class QSM:
                 self.debug_roty_dt_wing_g = kinematics_cfd[:, 21].flatten()
                 self.debug_rotz_dt_wing_g = kinematics_cfd[:, 22].flatten()                
                 
-            
+                
             #interpolate psi, beta, gamma, alpha, phi and theta  with respect to the original timeline
             psis_interp   = interp1d(time_it, psis_it  , fill_value='extrapolate')
             betas_interp  = interp1d(time_it, betas_it , fill_value='extrapolate')
@@ -583,7 +590,9 @@ class QSM:
         if 'from_file' in wingShape:
             wingShape_file = os.path.join(cfd_run, wingShape.replace('from_file::', ''))
         else:
-            raise("INI file uses a hardcoded wing shape which the QSM code cannot process")
+            # if the shape is unknown, setup_wing_shape returns a pseudo-wing shape contour
+            # note for computing the QSM, a shape model is in fact optional.
+            wingShape_file = 'none'
         
         self.setup_wing_shape(wingShape_file )
         
@@ -953,8 +962,14 @@ class QSM:
         
         print('Parsing wing contour: '+wingShape_file)
         
-        xc, yc, area = insect_tools.wing_contour_from_file( wingShape_file )
-        zc     = np.zeros_like(xc)
+        if os.path.isfile(wingShape_file):
+            xc, yc, area = insect_tools.wing_contour_from_file( wingShape_file )
+        else:
+            # if the shape is unknown, setup_wing_shape returns a pseudo-wing shape contour
+            # note for computing the QSM, a shape model is in fact optional.
+            xc, yc, area = np.asarray([0.0, 0.5, 0.0, -0.5, 0.0]), np.asarray([0.0, 0.5, 1.0, 0.5, 0.0]), 1.0
+            
+        zc = np.zeros_like(xc)
         
         self.wingPoints  = np.vstack([xc, yc, zc])
         self.wingPoints  = np.transpose(self.wingPoints)
