@@ -11,70 +11,68 @@ import wabbit_tools
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+#%% paratuposa
+# run = '/tmp/PP2_membranous/'
+# QSM = qsm_class.QSM()
+# QSM.setup_wing_shape(run+'Model_03_no-flight_200602right_bwmask.ini')
+# QSM.parse_kinematics(run+'PARAMS_bristled.ini', run+'kinematics.t')
+# QSM.fit_to_CFD(run, run+'PARAMS_bristled.ini', T0=1.0, optimize=True)
+
+run = '/home/engels/dev/WABBIT777/dragonfly2/Jmax6/v15-3/'
+QSM = qsm_class.QSM()
+QSM.setup_wing_shape(run+'forewing-shape-PF.ini')
+QSM.parse_kinematics(run+'dragonfly_PF_v15-3.ini', run+'kinematics.t', plot=True)
+QSM.fit_to_CFD(run, run+'dragonfly_PF_v15-3.ini', T0=1.0, optimize=True)
+
+# run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi140.00_phim5.00_dTau0.05/'
+# # run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
+# QSM = qsm_class.QSM()
+# QSM.setup_wing_shape(run+'WING_musca_noAlula.ini')
+# QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
+# QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=True)
+
+
+raise
+
 species = "Chaoborus_flavicans"
 
-plt.close('all')
-run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi80.00_phim5.00_dTau0.05/'
-# run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
-QSM = qsm_class.QSM()
-QSM.setup_wing_shape(run+'WING_musca_noAlula.ini')
-QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
-QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=True)
+# # plt.close('all')
+# run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi140.00_phim5.00_dTau0.05/'
+# # run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
+# QSM = qsm_class.QSM()
+# QSM.setup_wing_shape(run+'WING_musca_noAlula.ini')
+# QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
+# QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=True)
 
 # plt.close('all')
-# run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi110.00_phim5.00_dTau0.05/'
+# run = '/home/engels/musca_model/simulation/compensation/compensation_singleWing_3parameters/intact_wing/phi80.00_phim5.00_dTau-0.05/'
 # # run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/'+species+'/'
 # QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t')
 # QSM.fit_to_CFD(run, run+'PARAMS.ini', T0=1.0, optimize=False)
 
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.acc_wing_g[:,0])
-# plt.plot(QSM.timeline+1.0, QSM.acc_wing_g[:,0])
+
+plt.close('all')
+
+# run = '/home/engels/bristles/bristles_RSI/lift_based_kinematics/Re24/bristled_redesign_dB0.016/'
+run = '/home/engels/bristles/bristles_RSI/DRAG_BASED_NFFT30/drag_based_kinematics/Re24/bristled_redesign_dB0.016/'
+
+QSM = qsm_class.QSM()
+QSM.setup_wing_shape(run+'bristled_wing_redesigned_dB0.016.ini')
+QSM.parse_kinematics(run+'PARAMS_bristled.ini', run+'kinematics.t')
+QSM.fit_to_CFD(run, run+'PARAMS_bristled.ini', T0=1.0, optimize=True)
+
+plt.figure()
+
+ax = plt.figure().add_subplot(projection='3d')
 
 
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.F_CFD_w[:,0], 'g-')
-# plt.plot(QSM.timeline, QSM.F_CFD_w[:,1], 'r-')
-# plt.plot(QSM.timeline, QSM.F_CFD_w[:,2], 'b-')
+ax.plot(QSM.ey_wing_g[:,0], QSM.ey_wing_g[:,1], QSM.ey_wing_g[:,2])
+plt.axis('equal')
 
 
+# plt.close('all')
+# run = '/home/engels/bristles/bristles_RSI/DRAG_BASED_NFFT30/drag_based_kinematics/Re24/bristled_redesign_dB0.016/'
 
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.M_CFD_w[:,0], 'g-')
-# plt.plot(QSM.timeline, QSM.M_CFD_w[:,1], 'r-')
-# plt.plot(QSM.timeline, QSM.M_CFD_w[:,2], 'b-')
-
-
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.rots_wing_w[:,0], 'g-')
-# plt.plot(QSM.timeline, QSM.rots_wing_w[:,1], 'r-')
-# plt.plot(QSM.timeline, QSM.rots_wing_w[:,2], 'b-')
-
-# plt.plot(QSM.debug_time, QSM.debug_rotx_wing_g, 'g--')
-# plt.plot(QSM.debug_time, QSM.debug_roty_wing_g, 'r--')
-# plt.plot(QSM.debug_time, QSM.debug_rotz_wing_g, 'b--')
-
-
-
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.rot_acc_wing_w[:,0], 'g-')
-# plt.plot(QSM.timeline, QSM.rot_acc_wing_w[:,1], 'r-')
-# plt.plot(QSM.timeline, QSM.rot_acc_wing_w[:,2], 'b-')
-
-# plt.plot(QSM.debug_time, QSM.debug_rotx_dt_wing_g, 'g--')
-# plt.plot(QSM.debug_time, QSM.debug_roty_dt_wing_g, 'r--')
-# plt.plot(QSM.debug_time, QSM.debug_rotz_dt_wing_g, 'b--')
-
-
-# plt.figure()
-# plt.plot(QSM.timeline, QSM.Fz_CFD_g)
-# plt.plot(QSM.timeline+1.0, QSM.Fz_CFD_g)
-
-
-
-# ax = plt.figure().add_subplot(projection='3d')
-
-
-# ax.plot(QSM.ey_wing_g_sequence[:,0], QSM.ey_wing_g_sequence[:,1], QSM.ey_wing_g_sequence[:,2])
-# plt.axis('equal')
-plt.show()
+# QSM.parse_kinematics(run+'PARAMS_bristled.ini', run+'kinematics.t')
+# QSM.fit_to_CFD(run, run+'PARAMS_bristled.ini', T0=1.0, optimize=False)

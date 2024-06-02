@@ -31,6 +31,7 @@ class QSM:
         self.nt = nt
         
         self.timeline = np.linspace(0, 1, nt, endpoint=False)
+        self.delta_t = self.timeline[1] - self.timeline[0]    
         
         # here all of the required variable arrays are created to match the size of the timeline 
         # since for every timestep each variable must be computed. this will happen in 'generateSequence'  
@@ -50,11 +51,7 @@ class QSM:
         self.planar_rots_wing_s = np.zeros((nt, 3, 1))
         self.planar_rots_wing_w = np.zeros((nt, 3, 1))
         self.planar_rots_wing_g = np.zeros((nt, 3, 1))
-        
-        self.planar_rot_acc_wing_g = np.zeros((nt, 3, 1))
-        self.planar_rot_acc_wing_w = np.zeros((nt, 3, 1))
-        self.planar_rot_acc_wing_s = np.zeros((nt, 3, 1))
-        
+                
         self.us_wing_w = np.zeros((nt, 3, 1))
         self.us_wing_g = np.zeros((nt, 3, 1))
         self.us_wing_g_magnitude = np.zeros((nt))
@@ -91,15 +88,7 @@ class QSM:
         
         self.rotationMatrix_g_to_w = np.zeros((nt, 3, 3))
         self.rotationMatrix_w_to_g = np.zeros((nt, 3, 3))
-        
-        self.lever = np.zeros((nt))
-        self.lever_g = np.zeros((nt))
-        self.lever_w = np.zeros((nt))
-        
-        self.lever_w_average = 0
-        
-        self.delta_t = self.timeline[1] - self.timeline[0]
-        
+                        
         #global reference frame
         self.Ftc = np.zeros((nt, 3))
         self.Ftd = np.zeros((nt, 3))
@@ -607,7 +596,7 @@ class QSM:
             print('The parsed data correspond to the left wing.')
            
         # figure out what cycle to use
-        d = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t')
+        d = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', verbose=False)
         time_start, time_end = d[0,0], d[-1,0]
         print("CFD data t=[%f, %f]" % (time_start, time_end))
         print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
@@ -617,13 +606,7 @@ class QSM:
         # musca domestica data (which have large jumps exactly at the reversals)
         forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
         moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
-        # aerodynamic power
-        power_CFD = insect_tools.load_t_file(cfd_run+'/aero_power.t', interp=True, time_out=self.timeline+T0)           
-        
-        if (self.isLeft and self.isRight):
-            # the power is for both wings if they are included in the simulation
-            power_CFD[:, 1] /= 2.0 
-            
+
         self.Fx_CFD_g = forces_CFD[:, 1]
         self.Fy_CFD_g = forces_CFD[:, 2]
         self.Fz_CFD_g = forces_CFD[:, 3]
@@ -634,8 +617,6 @@ class QSM:
         
         self.F_CFD_g = np.vstack((self.Fx_CFD_g, self.Fy_CFD_g, self.Fz_CFD_g)).transpose()
         self.M_CFD_g = np.vstack((self.Mx_CFD_g, self.My_CFD_g, self.Mz_CFD_g)).transpose()
-
-        self.P_CFD = power_CFD[:, 1]
                
         # computation of M_CFD_w and F_CFD_w
         self.F_CFD_w = np.zeros_like( self.F_CFD_g )
@@ -652,6 +633,13 @@ class QSM:
         self.Mx_CFD_w = self.M_CFD_w[:,0]
         self.My_CFD_w = self.M_CFD_w[:,1]
         self.Mz_CFD_w = self.M_CFD_w[:,2]            
+        
+        # aerodynamic power. Can be read from t-file or computed from the dot-product of moment and angular 
+        # velocity. This latter is done here: we do not store the power for each wing separately in the CFD run, and hence
+        # computing it here is the better choice if possibly more than one wing has been simulated.
+        self.P_CFD = -(  self.Mx_CFD_w*self.rots_wing_w[:,0,0] 
+                       + self.My_CFD_w*self.rots_wing_w[:,1,0]  
+                       + self.Mz_CFD_w*self.rots_wing_w[:,2,0])
             
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
