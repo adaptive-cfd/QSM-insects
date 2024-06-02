@@ -15,8 +15,16 @@ import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from numpy.linalg import norm
 
-# Use kinematics.t in fit_to_CFD to avoid inconsistency for runs where kinematics have been wrongly processed
-# Use kinematics.ini for others, such as evaluating?
+# use latex
+plt.rcParams["text.usetex"] = True
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# TODO:
+#   - model for two wings
+#   - body force model
+#   - inertial power 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 class QSM:
     def __init__(self, nt=300):
@@ -132,7 +140,7 @@ class QSM:
         self.isLeft = 1
         
         
-    def parse_kinematics(self, params_file, kinematics_file):
+    def parse_kinematics(self, params_file, kinematics_file, plot=True):
         """
         Evaluate the kinematics given by kinematics_file and store the results
         in the class arrays. The kinematics file can be either: 
@@ -269,12 +277,8 @@ class QSM:
         # left or right wing?
         self.isLeft   = wt.get_ini_parameter(params_file, 'Insects', 'LeftWing', dtype=bool)
         self.isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
-        
-        if (self.isLeft and self.isRight):
-            raise("This simulation contains TWO wings which means QSM needs to be adapted (power is for both)")
-        
-        self.u_infty_g = wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True)
-        self.u_infty_g = np.asarray( -self.u_infty_g ) # note sign change (wind vs body)
+        # insects cruising speed        
+        self.u_infty_g = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
         
         if "kinematics.t" in kinematics_file:
             # load kinematics data by means of load_t_file function from insect_tools library 
@@ -486,6 +490,83 @@ class QSM:
             # time derivative in inertial frame
             self.rot_acc_wing_g[timeStep, :] = (self.rots_wing_g[(timeStep+1)%nt] - self.rots_wing_g[timeStep-1]) / (2*dt) #central scheme
             self.rot_acc_wing_w[timeStep, :] = np.matmul(self.rotationMatrix_g_to_w[timeStep, :], self.rot_acc_wing_g[timeStep, :])
+
+        if plot:
+            ## FIGURE 1
+            fig, axes = plt.subplots(3, 2, figsize = (15, 15))
+
+            # angles
+            ax = axes[0,0]
+            ax.plot(self.timeline, np.degrees(self.phis), label='$\\phi$')
+            ax.plot(self.timeline, np.degrees(self.alphas), label ='$\\alpha$')
+            ax.plot(self.timeline, np.degrees(self.thetas), label='$\\theta$')
+            ax.plot(self.timeline, np.degrees(self.AoA), label='AoA', color = 'purple')
+            ax.set_xlabel('$t/T$')
+            ax.set_ylabel('(deg)')
+            ax.legend() 
+            
+            # time derivatives of angles
+            ax = axes[0,1]
+            ax.plot(self.timeline, self.phis_dt, label='$\\dot\\phi$')
+            ax.plot(self.timeline, self.alphas_dt, label='$\\dot\\alpha$')
+            ax.plot(self.timeline, self.thetas_dt, label='$\\dot\\theta$')
+            
+            if self.isLeft == 0:
+                ax.plot(self.timeline, np.sign(-self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
+            else:
+                ax.plot(self.timeline, np.sign(+self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
+            ax.set_xlabel('$t/T$')
+            ax.legend()
+
+            # u_wing_w (tip velocity in wing reference frame )
+            ax = axes[1,0]
+            ax.plot(self.timeline, self.us_wing_w[:, 0], label='$u_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.us_wing_w[:, 1], label='$u_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.us_wing_w[:, 2], label='$u_{\\mathrm{wing},z}^{(w)}$')            
+            ax.plot(self.timeline, self.us_wing_g_magnitude, 'k--', label='$\\left| \\underline{u}_{\\mathrm{wing}} \\right|$')
+            
+            ax.set_xlabel('$t/T$')
+            ax.set_ylabel('[Rf]')
+            ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left(\\left|\\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.us_wing_g_magnitude)))
+            ax.legend()
+
+            #a_wing_w (tip acceleration in wing reference frame )
+            ax = axes[1,1]
+            ax.plot(self.timeline, self.acc_wing_w[:, 0], label='$\\dot{u}_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.acc_wing_w[:, 1], label='$\\dot{u}_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.acc_wing_w[:, 2], label='$\\dot{u}_{\\mathrm{wing},z}^{(w)}$')
+            ax.set_xlabel('$t/T$')
+            ax.set_ylabel('$Rf^2$')
+            ax.set_title('Tip acceleration in wing reference frame')
+            ax.legend()
+
+            #rot_wing_w (tip velocity in wing reference frame )
+            ax = axes[2,0]
+            ax.plot(self.timeline, self.rots_wing_w[:, 0], label='$\\Omega_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.rots_wing_w[:, 1], label='$\\Omega_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.rots_wing_w[:, 2], label='$\\Omega_{\\mathrm{wing},z}^{(w)}$')
+            ax.set_xlabel('$t/T$')
+            ax.set_ylabel('rad/T')
+            ax.set_title('Angular velocity in wing reference frame')
+            ax.legend()
+
+            #rot_acc_wing_w (angular acceleration in wing reference frame )
+            ax = axes[2,1]
+            ax.plot(self.timeline, self.rot_acc_wing_w[:, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.rot_acc_wing_w[:, 1], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.rot_acc_wing_g[:, 2], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
+            ax.set_xlabel('$t/T$')
+            ax.set_ylabel('[rad/T²]')
+            ax.set_title('Angular acceleration in wing reference frame')
+            ax.legend()
+
+
+
+            plt.tight_layout()
+            plt.draw()
+            
+            for ax in axes.flatten():
+                insect_tools.indicate_strokes(ax=ax)
             
 
             
@@ -536,9 +617,12 @@ class QSM:
         # musca domestica data (which have large jumps exactly at the reversals)
         forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
         moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
-        # ??? ATTENTION power is for the entire animal (two wings), if that has been computed
-        # It's only the power for one wing if only one is computed
+        # aerodynamic power
         power_CFD = insect_tools.load_t_file(cfd_run+'/aero_power.t', interp=True, time_out=self.timeline+T0)           
+        
+        if (self.isLeft and self.isRight):
+            # the power is for both wings if they are included in the simulation
+            power_CFD[:, 1] /= 2.0 
             
         self.Fx_CFD_g = forces_CFD[:, 1]
         self.Fy_CFD_g = forces_CFD[:, 2]
@@ -647,67 +731,7 @@ class QSM:
                 self.F_QSM_w[i, :] = np.matmul( self.rotationMatrix_g_to_w[i, :], self.F_QSM_g[i, :])
 
             if show_plots:
-                ##FIGURE 1
-                fig, axes = plt.subplots(3, 2, figsize = (15, 15))
 
-                #angles
-                axes[0, 0].plot(self.timeline, np.degrees(self.phis), label='ɸ')
-                axes[0, 0].plot(self.timeline, np.degrees(self.alphas), label ='⍺')
-                axes[0, 0].plot(self.timeline, np.degrees(self.thetas), label='Θ')
-                axes[0, 0].plot(self.timeline, np.degrees(self.AoA), label='AoA', color = 'purple')
-                axes[0, 0].set_xlabel('t/T')
-                axes[0, 0].set_ylabel('[˚]')
-                axes[0, 0].legend() 
-
-                #u_wing_w (tip velocity in wing reference frame )
-                axes[0, 1].plot(self.timeline, self.us_wing_w[:, 0], label='u_x_wing_w')
-                axes[0, 1].plot(self.timeline, self.us_wing_w[:, 1], label='u_y_wing_w')
-                axes[0, 1].plot(self.timeline, self.us_wing_w[:, 2], label='u_z_wing_w')
-                axes[0, 1].set_xlabel('t/T')
-                axes[0, 1].set_ylabel('[Rf]')
-                axes[0, 1].set_title('Tip velocity in wing reference frame')
-                axes[0, 1].legend()
-
-                #a_wing_w (tip acceleration in wing reference frame )
-                axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 0], label='a_x_wing_w')
-                axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 1], label='a_y_wing_w')
-                axes[1, 0].plot(self.timeline, self.acc_wing_w[:, 2], label='a_z_wing_w')
-                axes[1, 0].set_xlabel('t/T')
-                axes[1, 0].set_ylabel('[Tf^2]')
-                axes[1, 0].set_title('Tip acceleration in wing reference frame')
-                axes[1, 0].legend()
-
-                #rot_wing_w (tip velocity in wing reference frame )
-                axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 0], label='rot_x_wing_w')
-                axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 1], label='rot_y_wing_w')
-                axes[1, 1].plot(self.timeline, self.rots_wing_w[:, 2], label='rot_z_wing_w')
-                axes[1, 1].set_xlabel('t/T')
-                axes[1, 1].set_ylabel('rad/T')
-                axes[1, 1].set_title('Angular velocity in wing reference frame')
-                axes[1, 1].legend()
-
-                #rot_acc_wing_w (angular acceleration in wing reference frame )
-                axes[2, 0].plot(self.timeline, self.rot_acc_wing_w[:, 0], label='rot_acc_x_wing_w')
-                axes[2, 0].plot(self.timeline, self.rot_acc_wing_w[:, 1], label='rot_acc_y_wing_w')
-                axes[2, 0].plot(self.timeline, self.rot_acc_wing_g[:, 2], label='rot_acc_z_wing_w')
-                axes[2, 0].set_xlabel('t/T')
-                axes[2, 0].set_ylabel('[rad/T²]')
-                axes[2, 0].set_title('Angular acceleration in wing reference frame')
-                axes[2, 0].legend()
-
-                #alphas_dt
-                axes[2, 1].plot(self.timeline, self.alphas_dt)
-                axes[2, 1].set_xlabel('t/T')
-                axes[2, 1].set_ylabel('[˚/T]')
-                axes[2, 1].set_title('Time derivative of alpha')
-                axes[2, 1].legend()
-
-                plt.tight_layout()
-                plt.draw()
-                
-                for ax in axes.flatten():
-                    insect_tools.indicate_strokes(ax=ax)
-                
                 ##FIGURE 2
                 fig, axes = plt.subplots(2, 2, figsize = (15, 10))
 
@@ -731,7 +755,7 @@ class QSM:
                 # axes[0, 1].plot(timeline, Fwe[:, 2], label = 'Vertical wagner effect force')
                 axes[0, 1].plot(self.timeline, self.Fz_QSM_g, label = 'Vertical QSM force', ls='-.', color='blue')
                 axes[0, 1].plot(self.timeline, self.Fz_CFD_g, label = 'Vertical CFD force', ls='--', color='purple')
-                axes[0, 1].set_xlabel('t/T')
+                axes[0, 1].set_xlabel('$t/T$')
                 axes[0, 1].set_ylabel('force')
                 axes[0, 1].set_title('Vertical components of forces in global coordinate system')
                 axes[0, 1].legend(loc = 'lower right')
@@ -743,7 +767,7 @@ class QSM:
                 axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
                 axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
                 axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
-                axes[1, 0].set_xlabel('t/T')
+                axes[1, 0].set_xlabel('$t/T$')
                 axes[1, 0].set_ylabel('force')
                 axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
                 axes[1, 0].legend()
@@ -755,7 +779,7 @@ class QSM:
                 axes[1, 1].plot(self.timeline[:], self.Fy_CFD_g, label='Fy_CFD_g', linestyle = 'dashed', color='green')
                 axes[1, 1].plot(self.timeline[:], self.Fz_QSM_g, label='Fz_QSM_g', color='blue')            
                 axes[1, 1].plot(self.timeline[:], self.Fz_CFD_g, label='Fz_CFD_g', linestyle = 'dashed', color='blue')
-                axes[1, 1].set_xlabel('t/T')
+                axes[1, 1].set_xlabel('$t/T$')
                 axes[1, 1].set_ylabel('force')
                 axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.3f" % (norm(self.Fx_QSM_g)/norm(self.Fx_CFD_g), 
                                                                                     norm(self.Fy_QSM_g)/norm(self.Fy_CFD_g), 
@@ -780,7 +804,6 @@ class QSM:
             
             bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6)]
             K_forces = 9e9
-
             
             # optimize 3 times from a different initial guess, use best solution found
             # NOTE: tests indicate the system always finds the same solution, so this could
@@ -891,7 +914,7 @@ class QSM:
                 ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='-.', color='blue')
                 ax1.plot(self.timeline, self.Mz_QSM_w, label='Mz_QSM_w', color='green')
                 ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
-                ax1.set_xlabel('t/T')
+                ax1.set_xlabel('$t/T$')
                 ax1.set_ylabel('moment]')                
                 ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.Mx_QSM_w)/norm(self.Mx_CFD_w), 
                                                                             norm(self.My_QSM_w)/norm(self.My_CFD_w), 
@@ -902,9 +925,9 @@ class QSM:
                 ax2.plot(self.timeline, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
                 ax2.plot(self.timeline, self.P_QSM, label='P_QSM (optimized)', color='b')
                 ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='indigo')
-                ax2.set_xlabel('t/T')
+                ax2.set_xlabel('$t/T$')
                 ax2.set_ylabel('aerodynamic power')
-                ax2.set_title("K_power=%3.3f" % (K_power) )
+                ax2.set_title("P_QSM/P_CFD=%2.2f K_power=%3.3f" % (norm(self.P_QSM)/norm(self.P_CFD), K_power) )
                 ax2.legend()
                 plt.tight_layout()
                 plt.draw()
@@ -1010,6 +1033,12 @@ class QSM:
     
         self.hinge_index   = np.argmin( self.wingPoints[:, 1] )
         self.wingtip_index = np.argmax( self.wingPoints[:, 1] )
+        
+        # for kleemeier wing, integration did not work properly...
+        if np.isnan(self.Iam): self.Iam = 1.0
+        if np.isnan(self.Iwe): self.Iwe = 1.0
+        if np.isnan(self.Ild): self.Ild = 1.0
+        if np.isnan(self.Irot): self.Irot = 1.0
            
     
     def update_kinematics(self):
@@ -1017,3 +1046,4 @@ class QSM:
     
     def eval_trainedQSM_given_kinematics(self):
         return
+    
