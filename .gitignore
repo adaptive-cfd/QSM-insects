@@ -19,3 +19,4 @@ post_analysis_backup.py
 parse_data.py
 post_analysis/
 DATA.json
+intact_wing/
