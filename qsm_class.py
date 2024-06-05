@@ -307,22 +307,12 @@ class QSM:
             self.phis_dtdt[timeStep]   = (self.phis[(timeStep+1)%nt]   -2*self.phis[timeStep]   + self.phis[timeStep-1]  ) / (dt**2)
             self.thetas_dtdt[timeStep] = (self.thetas[(timeStep+1)%nt] -2*self.thetas[timeStep] + self.thetas[timeStep-1]) / (dt**2)
 
-        
-            # parameter array: psi [0], beta[1], gamma[2], eta[3], phi[4], alpha[5], theta[6]
-            parameters = [self.psis[timeStep], 
-                          self.betas[timeStep], 
-                          self.gammas[timeStep], 
-                          self.etas[timeStep], 
-                          self.phis[timeStep], 
-                          self.alphas[timeStep], 
-                          self.thetas[timeStep]] # 7 angles in radians! 
+            alpha, phi, theta, eta, psi, beta, gamma = self.alphas[timeStep], self.phis[timeStep], self.thetas[timeStep], self.etas[timeStep], self.psis[timeStep], self.betas[timeStep], self.gammas[timeStep]
+            alpha_dt, phi_dt, theta_dt       = self.alphas_dt[timeStep], self.phis_dt[timeStep], self.thetas_dt[timeStep]
             
-            parameters_dt = [0, 0, 0, 0, self.phis_dt[timeStep], self.alphas_dt[timeStep], self.thetas_dt[timeStep]]
-        
-           
-            self.wingRotationMatrix[timeStep, :]        = insect_tools.M_wing(self.alphas[timeStep], self.thetas[timeStep], self.phis[timeStep], wing=self.wing)
-            self.strokeRotationMatrix[timeStep, :]      = insect_tools.M_stroke(self.etas[timeStep], self.wing)
-            self.bodyRotationMatrix[timeStep, :]        = insect_tools.M_body(self.psis[timeStep], self.betas[timeStep], self.gammas[timeStep] )
+            self.wingRotationMatrix[timeStep, :]        = insect_tools.M_wing(alpha, theta, phi, wing=self.wing)
+            self.strokeRotationMatrix[timeStep, :]      = insect_tools.M_stroke(eta, self.wing)
+            self.bodyRotationMatrix[timeStep, :]        = insect_tools.M_body(psi, beta, gamma)
             self.wingRotationMatrixTrans[timeStep, :]   = np.transpose(self.wingRotationMatrix[timeStep, :])
             self.strokeRotationMatrixTrans[timeStep, :] = np.transpose(self.strokeRotationMatrix[timeStep, :])
             self.bodyRotationMatrixTrans[timeStep, :]   = np.transpose(self.bodyRotationMatrix[timeStep, :])
@@ -348,8 +338,8 @@ class QSM:
             self.ez_wing_w[timeStep, :] = ez_wing_w.reshape(3,)
         
             rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(
-                self.wingRotationMatrix[timeStep, :], self.bodyRotationMatrixTrans[timeStep, :], self.strokeRotationMatrixTrans[timeStep, :], parameters[4], parameters_dt[4], 
-                parameters[5], parameters_dt[5], parameters[6], parameters_dt[6], self.wing)
+                self.wingRotationMatrix[timeStep, :], self.bodyRotationMatrixTrans[timeStep, :], self.strokeRotationMatrixTrans[timeStep, :], 
+                phi, phi_dt, alpha, alpha_dt, theta, theta_dt, self.wing)
         
             self.rots_wing_b[timeStep, :] = rot_wing_b
             self.rots_wing_s[timeStep, :] = rot_wing_s
@@ -382,9 +372,9 @@ class QSM:
             # lift. lift vector is multiplied with the sign of alpha to have their signs match 
             liftVector_g = np.cross(e_u_wing_g, ey_wing_g.flatten())
             if self.wing == "right":
-                liftVector_g = liftVector_g * np.sign(-self.alphas[timeStep] )
+                liftVector_g = liftVector_g * np.sign(-alpha)
             else:
-                liftVector_g = liftVector_g * np.sign( self.alphas[timeStep] )
+                liftVector_g = liftVector_g * np.sign(+alpha)
         
             aoa = getAoA(ex_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1)) #use this one for getAoA with arccos 
             self.AoA[timeStep, :] = aoa
