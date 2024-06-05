@@ -14,6 +14,7 @@ import time
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from numpy.linalg import norm
+from insect_tools import Rx, Ry, Rz, vct
 
 # use latex
 plt.rcParams["text.usetex"] = True
@@ -126,8 +127,8 @@ class QSM:
         self.Ild  = 1.0
         self.Irot = 1.0
         
-        self.isLeft = 1
-        
+        self.wing = 'left'
+        self.wingPoints = np.zeros((10,3))
         
     def parse_kinematics(self, params_file, kinematics_file, plot=True, wing='auto'):
         """
@@ -140,88 +141,21 @@ class QSM:
         what about eta etc? is not in the file
 
         """
-        
-        #the convert_from_*_reference_frame_to_* functions convert points from one reference frame to another
-        #they take the points and the parameter list (angles) as arguments. 
-        #the function first calculates the rotation matrix and its transpose, and then multiplies each point with the tranpose since 
-        #by convention in this code we derotate as we start out with wing points and they must be converted down to global points. 
-        #this function returns the converted points as well as the rotation matrix and its tranpose 
-
-        def convert_from_wing_reference_frame_to_stroke_plane(points, parameters, isLeft):
-            #points passed into this fxn must be in the wing reference frame x(w) y(w) z(w)
-            #phi, alpha, theta
-            phi = parameters[4] #rad
-            alpha = parameters[5] #rad
-            theta = parameters[6] #rad
-            
-            if isLeft == 0: # right wing
-                phi = -phi 
-                alpha = -alpha 
-            rotationMatrix = np.matmul(
-                                            np.matmul(
-                                                    insect_tools.Ry(alpha),
-                                                    insect_tools.Rz(theta)
-                                            ),
-                                            insect_tools.Rx(phi)
-                                        )
-            rotationMatrixTrans = np.transpose(rotationMatrix)  
-            strokePoints = np.zeros((points.shape[0], 3))
-            for point in range(points.shape[0]): 
-                x_s = np.matmul(rotationMatrixTrans, points[point])
-                strokePoints[point, :] = x_s
-            return strokePoints, rotationMatrix, rotationMatrixTrans
-
-        def convert_from_stroke_plane_to_body_reference_frame(points, parameters, isLeft):
-            #points must be in stroke plane x(s) y(s) z(s)
-            eta = parameters[3] #rad
-            flip_angle = 0 
-            if isLeft == 0:
-                flip_angle = np.pi
-            rotationMatrix = np.matmul(
-                                        insect_tools.Rx(flip_angle),
-                                        insect_tools.Ry(eta)
-                                        )
-            rotationMatrixTrans = np.transpose(rotationMatrix) 
-            bodyPoints = np.zeros((points.shape[0], 3))
-            for point in range(points.shape[0]): 
-                x_b = np.matmul(rotationMatrixTrans, points[point])
-                bodyPoints[point,:] = x_b
-            return bodyPoints, rotationMatrix, rotationMatrixTrans
-
-        def convert_from_body_reference_frame_to_global_reference_frame(points, parameters, isLeft):
-            #points passed into this fxn must be in the body reference frame x(b) y(b) z(b)
-            #phi, alpha, theta
-            psi = parameters [0] #rad
-            beta = parameters [1] #rad
-            gamma = parameters [2] #rad
-            rotationMatrix = np.matmul(
-                                            np.matmul(
-                                                    insect_tools.Rx(psi),
-                                                    insect_tools.Ry(beta)
-                                            ),
-                                            insect_tools.Rz(gamma)
-                                        )
-            rotationMatrixTrans = np.transpose(rotationMatrix)
-            globalPoints = np.zeros((points.shape[0], 3))
-            for point in range(points.shape[0]): 
-                x_g = np.matmul(rotationMatrixTrans, points[point])
-                globalPoints[point, :] = x_g 
-            return globalPoints, rotationMatrix, rotationMatrixTrans
-        
+                
         #generate rot wing calculates the angular velocity of the wing in all reference frames, as well as the planar angular velocity {𝛀(φ,Θ)} 
         #which will later be used to calculate the forces on the wing.  planar angular velocity {𝛀(φ,Θ)} comes from the decomposition of the motion
         #into 'translational' and rotational components, with the rotational component beig defined as ⍺ (the one around the y-axis in our convention)
         #this velocity is obtained by setting ⍺ to 0, as can be seen below
-        def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, phi, phi_dt, alpha, alpha_dt, theta, theta_dt, isLeft): 
-            if not isLeft:
+        def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, phi, phi_dt, alpha, alpha_dt, theta, theta_dt, wing): 
+            if wing == "right":
                 phi = -phi
                 phi_dt = -phi_dt
                 alpha = -alpha
                 alpha_dt = -alpha_dt
                 
-            phiMatrixTrans   = np.transpose(insect_tools.Rx(phi)) 
-            alphaMatrixTrans = np.transpose(insect_tools.Ry(alpha)) 
-            thetaMatrixTrans = np.transpose(insect_tools.Rz(theta))
+            phiMatrixTrans   = np.transpose(Rx(phi)) 
+            alphaMatrixTrans = np.transpose(Ry(alpha)) 
+            thetaMatrixTrans = np.transpose(Rz(theta))
             
             vector_phi_dt = np.array([[phi_dt], [0], [0]])
             vector_alpha_dt = np.array([[0], [alpha_dt], [0]])
@@ -267,12 +201,19 @@ class QSM:
         if wing == 'auto':
             # read from PARAMS-file; this is the default. If we use QSM on a two (or four) winged simulation,
             # we create one QSM model for each wing.
-            self.isLeft   = wt.get_ini_parameter(params_file, 'Insects', 'LeftWing', dtype=bool)
-            self.isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
-        elif wing == 'left':
-            self.isLeft, self.isRight = 1, 0
-        elif wing == 'right':
-            self.isLeft, self.isRight = 0, 1
+            isLeft   = wt.get_ini_parameter(params_file, 'Insects', 'LeftWing', dtype=bool)
+            isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
+            
+            if isLeft:
+                wing == "left"
+            else:
+                wing == "right"
+            
+            if isLeft and isRight:
+                raise ValueError("This simulation included more than one wing, you need to create one QSM model per wing, pass wing=right and wing=left")
+                
+        self.wing = wing
+            
         # insects cruising speed        
         self.u_infty_g = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
         
@@ -285,7 +226,7 @@ class QSM:
             gammas_it = kinematics_cfd[:, 6].flatten()
             etas_it   = kinematics_cfd[:, 7].flatten()
             
-            if self.isLeft==0: 
+            if self.wing == "right": 
                 # right wing
                 alphas_it = kinematics_cfd[:,11].flatten()
                 phis_it   = kinematics_cfd[:,12].flatten()
@@ -343,17 +284,16 @@ class QSM:
             self.alphas = np.radians(alphas)
             self.thetas = np.radians(thetas)            
             
-            yawpitchroll0 = wt.get_ini_parameter('PARAMS.ini', 'Insects', 'yawpitchroll_0', vector=True)
-            eta_stroke    = wt.get_ini_parameter('PARAMS.ini', 'Insects', 'eta0', dtype=float )
+            yawpitchroll0 = wt.get_ini_parameter(params_file, 'Insects', 'yawpitchroll_0', vector=True)
+            eta_stroke    = wt.get_ini_parameter(params_file, 'Insects', 'eta0', dtype=float )
             
             # yaw pitch roll and stroke plane angle are all constant in time
-            self.psis   = np.zeros_like(self.phis) + yawpitchroll0[3]
-            self.betas  = np.zeros_like(self.phis) + yawpitchroll0[2]
-            self.gammas = np.zeros_like(self.phis) + yawpitchroll0[1]
+            self.psis   = np.zeros_like(self.phis) + yawpitchroll0[2]
+            self.betas  = np.zeros_like(self.phis) + yawpitchroll0[1]
+            self.gammas = np.zeros_like(self.phis) + yawpitchroll0[0]
             self.etas   = np.zeros_like(self.phis) + eta_stroke
         
-        dt = self.delta_t
-        nt = self.nt
+        dt, nt = self.delta_t, self.nt
         
         # kinematics
         for timeStep in range(self.nt):
@@ -379,36 +319,27 @@ class QSM:
             
             parameters_dt = [0, 0, 0, 0, self.phis_dt[timeStep], self.alphas_dt[timeStep], self.thetas_dt[timeStep]]
         
-            strokePoints, wingRotationMatrix, wingRotationMatrixTrans   = convert_from_wing_reference_frame_to_stroke_plane(self.wingPoints, parameters, self.isLeft)
-            bodyPoints, strokeRotationMatrix, strokeRotationMatrixTrans = convert_from_stroke_plane_to_body_reference_frame(strokePoints, parameters, self.isLeft)
-            globalPoints, bodyRotationMatrix, bodyRotationMatrixTrans   = convert_from_body_reference_frame_to_global_reference_frame(bodyPoints, parameters, self.isLeft)
+           
+            self.wingRotationMatrix[timeStep, :]        = insect_tools.M_wing(self.alphas[timeStep], self.thetas[timeStep], self.phis[timeStep], wing=self.wing)
+            self.strokeRotationMatrix[timeStep, :]      = insect_tools.M_stroke(self.etas[timeStep], self.wing)
+            self.bodyRotationMatrix[timeStep, :]        = insect_tools.M_body(self.psis[timeStep], self.betas[timeStep], self.gammas[timeStep] )
+            self.wingRotationMatrixTrans[timeStep, :]   = np.transpose(self.wingRotationMatrix[timeStep, :])
+            self.strokeRotationMatrixTrans[timeStep, :] = np.transpose(self.strokeRotationMatrix[timeStep, :])
+            self.bodyRotationMatrixTrans[timeStep, :]   = np.transpose(self.bodyRotationMatrix[timeStep, :])
         
-            self.strokePointsSequence[timeStep, :] = strokePoints
-            self.bodyPointsSequence[timeStep, :]   = bodyPoints
-            self.globalPointsSequence[timeStep, :] = globalPoints
-        
-            self.wingRotationMatrix[timeStep, :]        = wingRotationMatrix
-            self.wingRotationMatrixTrans[timeStep, :]   = wingRotationMatrixTrans
-            self.strokeRotationMatrix[timeStep, :]      = strokeRotationMatrix
-            self.strokeRotationMatrixTrans[timeStep, :] = strokeRotationMatrixTrans
-            self.bodyRotationMatrix[timeStep, :]        = bodyRotationMatrix
-            self.bodyRotationMatrixTrans[timeStep, :]   = bodyRotationMatrixTrans
-        
-            self.rotationMatrix_g_to_w[timeStep, :] = np.matmul(wingRotationMatrix, np.matmul(strokeRotationMatrix, bodyRotationMatrix))
-            # ??? should just be the transpose of previous line???
-            self.rotationMatrix_w_to_g[timeStep, :] = np.matmul(np.matmul(bodyRotationMatrixTrans, strokeRotationMatrixTrans), wingRotationMatrixTrans)
+            self.rotationMatrix_g_to_w[timeStep, :] = self.wingRotationMatrix[timeStep, :]*self.strokeRotationMatrix[timeStep, :]*self.bodyRotationMatrix[timeStep, :]
+            self.rotationMatrix_w_to_g[timeStep, :] = np.transpose(self.rotationMatrix_g_to_w[timeStep, :])
         
             # these are all the absolute unit vectors of the wing 
             # ey_wing_g coincides with the tip only if R is normalized. 
-            ex_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[1], [0], [0]]))))))
-            ey_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[0], [1], [0]]))))))
-            ez_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[0], [0], [1]]))))))
-        
-            ey_wing_s = np.matmul(wingRotationMatrixTrans, np.array([[0], [1], [0]]))
+            ex_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([1,0,0])
+            ey_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([0,1,0])
+            ez_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([0,0,1])        
+            ey_wing_s = self.wingRotationMatrixTrans[timeStep, :] * vct([0,1,0])
         
             self.ey_wing_g[timeStep, :] = ey_wing_g.flatten()
             self.ez_wing_g[timeStep, :] = ez_wing_g.flatten()
-        
+            
             self.ey_wing_s[timeStep, :] = ey_wing_s.reshape(3,)
         
             ey_wing_w = np.array([[0], [1], [0]])
@@ -417,8 +348,8 @@ class QSM:
             self.ez_wing_w[timeStep, :] = ez_wing_w.reshape(3,)
         
             rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(
-                wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], 
-                parameters[5], parameters_dt[5], parameters[6], parameters_dt[6], self.isLeft)
+                self.wingRotationMatrix[timeStep, :], self.bodyRotationMatrixTrans[timeStep, :], self.strokeRotationMatrixTrans[timeStep, :], parameters[4], parameters_dt[4], 
+                parameters[5], parameters_dt[5], parameters[6], parameters_dt[6], self.wing)
         
             self.rots_wing_b[timeStep, :] = rot_wing_b
             self.rots_wing_s[timeStep, :] = rot_wing_s
@@ -434,7 +365,7 @@ class QSM:
             u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), ey_wing_g.reshape(1,3)) + self.u_infty_g
             self.us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
         
-            u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix)
+            u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), self.bodyRotationMatrix[timeStep, :], self.strokeRotationMatrix[timeStep, :], self.wingRotationMatrix[timeStep, :])
             self.us_wing_w[timeStep, :] = u_wing_w
         
        
@@ -450,7 +381,7 @@ class QSM:
         
             # lift. lift vector is multiplied with the sign of alpha to have their signs match 
             liftVector_g = np.cross(e_u_wing_g, ey_wing_g.flatten())
-            if self.isLeft == 0:
+            if self.wing == "right":
                 liftVector_g = liftVector_g * np.sign(-self.alphas[timeStep] )
             else:
                 liftVector_g = liftVector_g * np.sign( self.alphas[timeStep] )
@@ -466,16 +397,6 @@ class QSM:
                 e_liftVector_g = liftVector_g
             self.e_liftVectors_g[timeStep, :] = e_liftVector_g
         
-            # #validation of our u_wing_g by means of a first order approximation
-            # #left and right derivative: 
-            # verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
-            # currentGlobalPoint = globalPointsSequence[timeStep]
-            # leftGlobalPoint = globalPointsSequence[timeStep-1]
-            # rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
-            # LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
-            # RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
-            # verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
-            # verifying_us_wing_g = verifying_us_wing_g
             
         #calculation of wingtip acceleration and angular acceleration in wing reference frame 
         for timeStep in range(nt):
@@ -507,7 +428,7 @@ class QSM:
             ax.plot(self.timeline, self.alphas_dt, label='$\\dot\\alpha$')
             ax.plot(self.timeline, self.thetas_dt, label='$\\dot\\theta$')
             
-            if self.isLeft == 0:
+            if self.wing == "right":
                 ax.plot(self.timeline, np.sign(-self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
             else:
                 ax.plot(self.timeline, np.sign(+self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
@@ -549,8 +470,8 @@ class QSM:
             #rot_acc_wing_w (angular acceleration in wing reference frame )
             ax = axes[2,1]
             ax.plot(self.timeline, self.rot_acc_wing_w[:, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.rot_acc_wing_w[:, 1], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.rot_acc_wing_g[:, 2], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.rot_acc_wing_w[:, 1], label='$\\dot\\Omega_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.rot_acc_wing_g[:, 2], label='$\\dot\\Omega_{\\mathrm{wing},z}^{(w)}$')
             ax.set_xlabel('$t/T$')
             ax.set_ylabel('[rad/T²]')
             ax.set_title('Angular acceleration in wing reference frame')
@@ -597,15 +518,11 @@ class QSM:
         self.setup_wing_shape(wingShape_file )
         
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~ read CFD force/moments/power ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if self.isLeft == 0: 
-            wing = 'right'
-            print('The parsed data correspond to the right wing.')
-        else: 
-            wing = 'left'
-            print('The parsed data correspond to the left wing.')
+        print('The parsed data correspond to the %s wing.' % (self.wing))
+
            
         # figure out what cycle to use
-        d = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', verbose=False)
+        d = insect_tools.load_t_file(cfd_run+'/forces_'+self.wing+'wing.t', verbose=False)
         time_start, time_end = d[0,0], d[-1,0]
         print("CFD data t=[%f, %f]" % (time_start, time_end))
         print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
@@ -613,8 +530,8 @@ class QSM:
         # read in data from desired cycle (hence the shift by T0)
         # NOTE that load_t_file can remove outliers in the data, which turned out very useful for the 
         # musca domestica data (which have large jumps exactly at the reversals)
-        forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
-        moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
+        forces_CFD  = insect_tools.load_t_file(cfd_run+'/forces_'+self.wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
+        moments_CFD = insect_tools.load_t_file(cfd_run+'/moments_'+self.wing+'wing.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
 
         self.Fx_CFD_g = forces_CFD[:, 1]
         self.Fy_CFD_g = forces_CFD[:, 2]
@@ -974,9 +891,7 @@ class QSM:
         self.wingPoints  = np.vstack([xc, yc, zc])
         self.wingPoints  = np.transpose(self.wingPoints)
         
-        self.strokePointsSequence = np.zeros((self.nt, self.wingPoints.shape[0], 3))
         self.bodyPointsSequence   = np.zeros((self.nt, self.wingPoints.shape[0], 3))
-        self.globalPointsSequence = np.zeros((self.nt, self.wingPoints.shape[0], 3))
         
         wingtip_index = np.argmax( self.wingPoints[:, 1] )
         
