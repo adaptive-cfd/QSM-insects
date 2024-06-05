@@ -308,24 +308,31 @@ class QSM:
             self.thetas_dtdt[timeStep] = (self.thetas[(timeStep+1)%nt] -2*self.thetas[timeStep] + self.thetas[timeStep-1]) / (dt**2)
 
             alpha, phi, theta, eta, psi, beta, gamma = self.alphas[timeStep], self.phis[timeStep], self.thetas[timeStep], self.etas[timeStep], self.psis[timeStep], self.betas[timeStep], self.gammas[timeStep]
-            alpha_dt, phi_dt, theta_dt       = self.alphas_dt[timeStep], self.phis_dt[timeStep], self.thetas_dt[timeStep]
+            alpha_dt, phi_dt, theta_dt = self.alphas_dt[timeStep], self.phis_dt[timeStep], self.thetas_dt[timeStep]
             
-            self.wingRotationMatrix[timeStep, :]        = insect_tools.M_wing(alpha, theta, phi, wing=self.wing)
-            self.strokeRotationMatrix[timeStep, :]      = insect_tools.M_stroke(eta, self.wing)
-            self.bodyRotationMatrix[timeStep, :]        = insect_tools.M_body(psi, beta, gamma)
-            self.wingRotationMatrixTrans[timeStep, :]   = np.transpose(self.wingRotationMatrix[timeStep, :])
-            self.strokeRotationMatrixTrans[timeStep, :] = np.transpose(self.strokeRotationMatrix[timeStep, :])
-            self.bodyRotationMatrixTrans[timeStep, :]   = np.transpose(self.bodyRotationMatrix[timeStep, :])
+            M_wing   = insect_tools.M_wing(alpha, theta, phi, wing=self.wing)
+            M_stroke = insect_tools.M_stroke(eta, self.wing)
+            M_body   = insect_tools.M_body(psi, beta, gamma)
+            M_g2w    = M_wing*M_stroke*M_body
+            M_w2g    = M_g2w.T
+            
+            self.wingRotationMatrix[timeStep, :]        = M_wing
+            self.strokeRotationMatrix[timeStep, :]      = M_stroke
+            self.bodyRotationMatrix[timeStep, :]        = M_body
+            self.wingRotationMatrixTrans[timeStep, :]   = np.transpose(M_wing)
+            self.strokeRotationMatrixTrans[timeStep, :] = np.transpose(M_stroke)
+            self.bodyRotationMatrixTrans[timeStep, :]   = np.transpose(M_body)
         
-            self.rotationMatrix_g_to_w[timeStep, :] = self.wingRotationMatrix[timeStep, :]*self.strokeRotationMatrix[timeStep, :]*self.bodyRotationMatrix[timeStep, :]
-            self.rotationMatrix_w_to_g[timeStep, :] = np.transpose(self.rotationMatrix_g_to_w[timeStep, :])
+            self.rotationMatrix_g_to_w[timeStep, :]     = M_g2w
+            self.rotationMatrix_w_to_g[timeStep, :]     = M_w2g
         
             # these are all the absolute unit vectors of the wing 
             # ey_wing_g coincides with the tip only if R is normalized. 
-            ex_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([1,0,0])
-            ey_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([0,1,0])
-            ez_wing_g = self.rotationMatrix_w_to_g[timeStep, :]   * vct([0,0,1])        
-            ey_wing_s = self.wingRotationMatrixTrans[timeStep, :] * vct([0,1,0])
+            ex_wing_g = M_w2g   * vct([1,0,0])
+            ey_wing_g = M_w2g   * vct([0,1,0])
+            ez_wing_g = M_w2g   * vct([0,0,1])        
+            ey_wing_s = M_wing.T * vct([0,1,0])
+            
         
             self.ey_wing_g[timeStep, :] = ey_wing_g.flatten()
             self.ez_wing_g[timeStep, :] = ez_wing_g.flatten()
