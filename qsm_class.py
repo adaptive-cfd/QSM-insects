@@ -205,10 +205,10 @@ class QSM:
             isRight  = wt.get_ini_parameter(params_file, 'Insects', 'RightWing', dtype=bool)
             
             if isLeft:
-                wing == "left"
-            else:
-                wing == "right"
-            
+                wing = "left"
+            if isRight:
+                wing = "right"
+                
             if isLeft and isRight:
                 raise ValueError("This simulation included more than one wing, you need to create one QSM model per wing, pass wing=right and wing=left")
                 
@@ -484,7 +484,7 @@ class QSM:
             
 
             
-    def fit_to_CFD(self, cfd_run, paramsfile, T0=0.0, optimize=True):
+    def fit_to_CFD(self, cfd_run, paramsfile, T0=0.0, optimize=True, plot=True):
         """
         Train the QSM model with a CFD run. This works only if you have initialized 
             * the kinematics with parse_kinematics_file
@@ -719,7 +719,7 @@ class QSM:
             # optimize 3 times from a different initial guess, use best solution found
             # NOTE: tests indicate the system always finds the same solution, so this could
             # be omitted. Kept for safety - we do less likely get stuck in local minima this way
-            for itrial in range(3):
+            for itrial in range(1):
                 x0_forces = np.random.rand(8)
                 optimization = opt.minimize(cost_forces, args=(self, False), bounds=bounds, x0=x0_forces)
                 
@@ -735,7 +735,7 @@ class QSM:
             print('Completed in:', round(time.time() - start, 4), 'seconds')
             print('x0_optimized:', np.round(self.x0_forces, 5), '\nK_optimized_forces:', K_forces)
             
-        cost_forces(self.x0_forces, self, show_plots=True)
+        cost_forces(self.x0_forces, self, show_plots=plot)
         
         #%% moments optimization
         
@@ -777,7 +777,8 @@ class QSM:
             print('Completed in:', round(time.time() - start, 4), 'seconds')
             
             print('x0_moments_optimized:', np.round(self.x0_moments, 5), '\nK_moments_optimized:', self.K_moments)
-        cost_moments(self.x0_moments, self, True)
+            
+        cost_moments(self.x0_moments, self, plot)
 
 
 
@@ -861,7 +862,8 @@ class QSM:
             
             print('x0_power:', np.round(self.x0_power, 5), '\nK_power_optimized:', self.K_power)
             
-        cost_power(self.x0_power, self, show_plots=True)
+        
+        cost_power(self.x0_power, self, show_plots=plot)
             
 
     def setup_wing_shape(self, wingShape_file, nb=1000):
