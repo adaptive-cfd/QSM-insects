@@ -20,3 +20,4 @@ parse_data.py
 post_analysis/
 DATA.json
 intact_wing/
+junk.py
