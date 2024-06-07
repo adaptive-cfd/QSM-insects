@@ -10,6 +10,7 @@ import wabbit_tools as wt
 import insect_tools
 import os
 from scipy.interpolate import interp1d
+import scipy
 import time
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
@@ -378,15 +379,10 @@ class QSM:
         
             # lift. lift vector is multiplied with the sign of alpha to have their signs match 
             liftVector_g = np.cross(e_u_wing_g, ey_wing_g.flatten())
-            if self.wing == "right":
-                liftVector_g = liftVector_g * np.sign(-alpha)
-            else:
-                liftVector_g = liftVector_g * np.sign(+alpha)
-        
+
             aoa = getAoA(ex_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1)) #use this one for getAoA with arccos 
             self.AoA[timeStep, :] = aoa
-            
-            
+                        
             liftVector_magnitude = np.sqrt(liftVector_g[0, 0]**2 + liftVector_g[0, 1]**2 + liftVector_g[0, 2]**2)
             if liftVector_magnitude != 0: 
                 e_liftVector_g = liftVector_g / liftVector_magnitude
@@ -394,9 +390,50 @@ class QSM:
                 e_liftVector_g = liftVector_g
             self.e_liftVectors_g[timeStep, :] = e_liftVector_g
         
+        
+        #----------------------------------------------------------------------
+        # sign of lift vector
+        #----------------------------------------------------------------------
+        # the lift vector is until here only defined up to a sign. we decide about this sign now.
+        # Many papers simply use SIGN(ALPHA) for this task, but for some kinematics we found this
+        # does not work.
+        # Note there is a subtlety with the sign: is it positive during up- or downstroke? This does not really
+        # matter if the optimizer is used, because it can simply flip the coefficients.
+        
+        sign = np.ones_like(self.e_liftVectors_g)
+        if self.wing == "left":
+            # for left and right wing, the sign is inverted (hence using the array "sign", otherwise we'd just
+            # flip the sign directly in e_liftVectors_g)
+            sign = -1.0
+            
+        # find minima in wingtip velocity magnitude. those, hopefully two, will be the reversals.
+        # this is where the sign is flipped.
+        # We repeat the (periodic) signal to ensure we capture peaks at 0 or nt
+        ii, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.us_wing_g_magnitude.flatten()] ) , distance=self.nt/4)
+        ii -= self.nt
+        # keep only peaks in the original signal domain
+        ii = ii[ii>=0]
+        ii = ii[ii<self.nt]
+        
+        # It should be two minima of velocity, if its not, then something weird happens in the kinematics.
+        # We must then look for a different way to determine reversals or set it manually.
+        if len(ii) != 2 :
+            plt.figure()
+            plt.plot( -1*np.hstack(  (3*[self.us_wing_g_magnitude.flatten()]) ) )
+            print(ii)
+            raise ValueError("We found more than two reversals in the kinematics data...")
+            
+        sign[ ii[0]:ii[1], : ] *= -1
+        self.e_liftVectors_g *= sign
+        # for indication in figures:
+        self.T_reversals = self.timeline[ii]
+            
+            
+            
+        
             
         #calculation of wingtip acceleration and angular acceleration in wing reference frame 
-        for timeStep in range(nt):
+        for timeStep in range(nt):            
             # time derivative in inertial frame
             self.acc_wing_g[timeStep, :] = (self.us_wing_g[(timeStep+1)%nt] - self.us_wing_g[timeStep-1])/(2*dt)
             self.acc_wing_w[timeStep, :] = np.matmul(self.rotationMatrix_g_to_w[timeStep, :], self.acc_wing_g[timeStep, :])
@@ -426,9 +463,9 @@ class QSM:
             ax.plot(self.timeline, self.thetas_dt, label='$\\dot\\theta$')
             
             if self.wing == "right":
-                ax.plot(self.timeline, np.sign(-self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
+                ax.plot(self.timeline, np.sign(-self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$', linewidth=0.5 )
             else:
-                ax.plot(self.timeline, np.sign(+self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$' )
+                ax.plot(self.timeline, np.sign(+self.alphas), 'k--', label='$\\mathrm{sign}(\\alpha)$', linewidth=0.5 )
             ax.set_xlabel('$t/T$')
             ax.legend()
 
@@ -480,7 +517,7 @@ class QSM:
             plt.draw()
             
             for ax in axes.flatten():
-                insect_tools.indicate_strokes(ax=ax)
+                insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
             
 
             
@@ -499,20 +536,7 @@ class QSM:
         
         The optimized coefficients are stored in the QSM object.
         """
-        
-        self.time_max = wt.get_ini_parameter(paramsfile, 'Time', 'time_max', dtype=float)
-
-        # setup the wing planform
-        # NB: one can actually skip this, but not in the current implementation
-        wingShape = wt.get_ini_parameter(paramsfile, 'Insects', 'WingShape', dtype=str)        
-        if 'from_file' in wingShape:
-            wingShape_file = os.path.join(cfd_run, wingShape.replace('from_file::', ''))
-        else:
-            # if the shape is unknown, setup_wing_shape returns a pseudo-wing shape contour
-            # note for computing the QSM, a shape model is in fact optional.
-            wingShape_file = 'none'
-        
-        self.setup_wing_shape(wingShape_file )
+       
         
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~ read CFD force/moments/power ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         print('The parsed data correspond to the %s wing.' % (self.wing))
@@ -700,7 +724,7 @@ class QSM:
 
 
                 for ax in axes.flatten()[1:]:
-                    insect_tools.indicate_strokes(ax=ax)
+                    insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
 
                 plt.tight_layout()
                 plt.draw()
@@ -727,7 +751,9 @@ class QSM:
                 
                 if optimization.fun < K_forces:
                     K_forces = optimization.fun
-                    x0_best = x0_forces                
+                    x0_best = x0_forces        
+                    
+                print('Trial %i/%i K=%2.3f' % (i_trial+1, N_trials, optimization.fun))
                     
             self.x0_forces = x0_best     
             self.K_forces = K_forces
@@ -844,8 +870,8 @@ class QSM:
                 plt.tight_layout()
                 plt.draw()
                 
-                insect_tools.indicate_strokes(ax=ax1)
-                insect_tools.indicate_strokes(ax=ax2)
+                insect_tools.indicate_strokes(ax=ax1, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
+                insect_tools.indicate_strokes(ax=ax2, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
                 
             return K_power
 
