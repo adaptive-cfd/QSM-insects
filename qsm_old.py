@@ -16,7 +16,7 @@ import functools
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from python_tools_master import insect_tools as it 
 from python_tools_master import wabbit_tools as wt
-from debug import writeArraytoFile
+from usefulFunctions import writeArraytoFile
 from datetime import datetime
 import time
 
