@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 
-@author: nico
+@author: Nicolas Munoz Giraldo, TU Berlin, as part of B.Sc. thesis under the supervision of Thomas Engels, CRCN, CNRS Aix-Marseille U & TU Berlin
 """
 ##%kinematics
 import os
@@ -21,8 +21,8 @@ from datetime import datetime
 import time
 
 start_main = time.time()
-#different cfd runs: #'phi120.00_phim20.00_dTau0.05' #'phi129.76_phim10.34_dTau0.00' #'intact_wing_phi120.00_phim20.00_dTau0.05'
-cfd_run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_corrected/Bibio_marcis/'
+#different cfd runs: #'/home/nico/Documents/school/thesis/wing_motion_python/single-wing-simulations/musca-simulations/damagedWing_Mm04Right/phi120.00_phim5.00_dTau0.00'
+cfd_run = '/home/nico/Documents/school/thesis/wing_motion_python/single-wing-simulations/musca-simulations/damagedWing_Mm04Right/phi120.00_phim5.00_dTau0.00'
 def main(cfd_run, folder_name):
 
     #timestamp variable for saving figures with actual timestamp 
@@ -130,17 +130,17 @@ def main(cfd_run, folder_name):
 
     #here all of the required variable arrays are created to match the size of the timeline 
     #since for every timestep each variable must be computed. this will happen in 'generateSequence'  
-    alphas_dt_sequence = np.zeros((nt))
-    phis_dt_sequence = np.zeros((nt))
-    thetas_dt_sequence = np.zeros((nt))
+    alphas_dt = np.zeros((nt))
+    phis_dt = np.zeros((nt))
+    thetas_dt = np.zeros((nt))
 
-    alphas_dt_dt_sequence = np.zeros((nt))
-    phis_dt_dt_sequence = np.zeros((nt))
-    thetas_dt_dt_sequence = np.zeros((nt))
+    alphas_dt_dt = np.zeros((nt))
+    phis_dt_dt = np.zeros((nt))
+    thetas_dt_dt = np.zeros((nt))
 
-    strokePointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
-    bodyPointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
-    globalPointsSequence = np.zeros((nt, wingPoints.shape[0], 3))
+    strokePoints = np.zeros((nt, wingPoints.shape[0], 3))
+    bodyPoints = np.zeros((nt, wingPoints.shape[0], 3))
+    globalPoints = np.zeros((nt, wingPoints.shape[0], 3))
 
     rots_wing_b = np.zeros((nt, 3, 1))
     rots_wing_s = np.zeros((nt, 3, 1))
@@ -174,22 +174,22 @@ def main(cfd_run, folder_name):
     liftVectors = np.zeros((nt, 3))
     e_liftVectors_g = np.zeros((nt, 3))
 
-    y_wing_g_sequence = np.zeros((nt, 3))
-    z_wing_g_sequence = np.zeros((nt, 3))
+    y_wing_g = np.zeros((nt, 3))
+    z_wing_g = np.zeros((nt, 3))
 
-    y_wing_s_sequence = np.zeros((nt, 3))
+    y_wing_s = np.zeros((nt, 3))
 
-    y_wing_w_sequence = np.zeros((nt, 3))
-    z_wing_w_sequence = np.zeros((nt, 3))
+    y_wing_w = np.zeros((nt, 3))
+    z_wing_w = np.zeros((nt, 3))
 
     e_Fam = np.zeros((nt, 3))
 
-    wingRotationMatrix_sequence = np.zeros((nt, 3, 3))
-    wingRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
-    strokeRotationMatrix_sequence = np.zeros((nt, 3, 3))
-    strokeRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
-    bodyRotationMatrix_sequence = np.zeros((nt, 3, 3))
-    bodyRotationMatrixTrans_sequence = np.zeros((nt, 3, 3))
+    wingRotationMatrix = np.zeros((nt, 3, 3))
+    wingRotationMatrixTrans = np.zeros((nt, 3, 3))
+    strokeRotationMatrix = np.zeros((nt, 3, 3))
+    strokeRotationMatrixTrans = np.zeros((nt, 3, 3))
+    bodyRotationMatrix = np.zeros((nt, 3, 3))
+    bodyRotationMatrixTrans = np.zeros((nt, 3, 3))
 
     rotationMatrix_g_to_w = np.zeros((nt, 3, 3))
     rotationMatrix_w_to_g = np.zeros((nt, 3, 3))
@@ -487,7 +487,7 @@ def main(cfd_run, folder_name):
 
     def animationPlot(ax, timeStep):
         #get point set by timeStep number
-        points = globalPointsSequence[timeStep] #pointsSequence can either be global, body, stroke 
+        points = globalPoints[timeStep] #pointsSequence can either be global, body, stroke 
         #clear the current axis 
         ax.cla()
 
@@ -499,7 +499,7 @@ def main(cfd_run, folder_name):
         #axis limit
         a = 2
 
-        trajectory = np.array(globalPointsSequence)[:, wingtip_index]
+        trajectory = np.array(globalPoints)[:, wingtip_index]
         #3D trajectory 
         ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], color='k', linestyle='dashed', linewidth=0.5)
 
@@ -540,8 +540,8 @@ def main(cfd_run, folder_name):
         ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], liftVector_g[0], liftVector_g[1], liftVector_g[2], color='blue', label=r'$\overrightarrow{e_L}^{(g)}_w$')
         
         #z_wing_g 
-        z_wing_g_sequence_plot = z_wing_g_sequence[timeStep]
-        ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_sequence_plot[0], z_wing_g_sequence_plot[1], z_wing_g_sequence_plot[2], color='red', label=r'$\overrightarrow{e_{F_{am}}}^{(g)}_w$')
+        z_wing_g_plot = z_wing_g[timeStep]
+        ax.quiver(X[wingtip_index], Y[wingtip_index], Z[wingtip_index], z_wing_g_plot[0], z_wing_g_plot[1], z_wing_g_plot[2], color='red', label=r'$\overrightarrow{e_{F_{am}}}^{(g)}_w$')
 
         # #e_Fam 
         # e_Fam_plot = e_Fam[timeStep]
@@ -571,59 +571,59 @@ def main(cfd_run, folder_name):
     #kinematics
     for timeStep in range(nt):
         #here the 1st time derivatives of the angles are calculated by means of 2nd order central difference approximations
-        alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep-1]) / (2*delta_t) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
-        phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
-        thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep-1]) / (2*delta_t)
+        _alphas_dt = (alphas[(timeStep+1)%nt] - alphas[timeStep-1]) / (2*delta_t) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
+        _phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep-1]) / (2*delta_t)
+        _thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep-1]) / (2*delta_t)
 
         # #here the 1st time derivatives of the angles are calculated by means of 1st order forward difference approximations
-        # alphas_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / (delta_t)
-        # phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / (delta_t) #1st order forward difference approximation of 1st derivative of phi
-        # thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / (delta_t)
+        # _alphas_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / (delta_t)
+        # _phis_dt = (phis[(timeStep+1)%nt] - phis[timeStep]) / (delta_t) #1st order forward difference approximation of 1st derivative of phi
+        # _thetas_dt = (thetas[(timeStep+1)%nt] - thetas[timeStep]) / (delta_t)
 
         # parameter array: psi [0], beta[1], gamma[2], eta[3], phi[4], alpha[5], theta[6]
         parameters = [psis[timeStep], betas[timeStep], gammas[timeStep], etas[timeStep], phis[timeStep], alphas[timeStep], thetas[timeStep]] # 7 angles in radians! #without alphas[timeStep] any rotation around any y axis through an angle of pi/2 gives an error! 
-        parameters_dt = [0, 0, 0, 0, phis_dt, alphas_dt, thetas_dt]
+        parameters_dt = [0, 0, 0, 0, _phis_dt, _alphas_dt, _thetas_dt]
 
-        strokePoints, wingRotationMatrix, wingRotationMatrixTrans = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
-        bodyPoints, strokeRotationMatrix, strokeRotationMatrixTrans = convert_from_stroke_plane_to_body_reference_frame(strokePoints, parameters)
-        globalPoints, bodyRotationMatrix, bodyRotationMatrixTrans = convert_from_body_reference_frame_to_global_reference_frame(bodyPoints, parameters)
+        _strokePoints, _wingRotationMatrix, _wingRotationMatrixTrans = convert_from_wing_reference_frame_to_stroke_plane(wingPoints, parameters)
+        _bodyPoints, _strokeRotationMatrix, _strokeRotationMatrixTrans = convert_from_stroke_plane_to_body_reference_frame(_strokePoints, parameters)
+        _globalPoints, _bodyRotationMatrix, _bodyRotationMatrixTrans = convert_from_body_reference_frame_to_global_reference_frame(_bodyPoints, parameters)
 
-        strokePointsSequence[timeStep, :] = strokePoints
-        bodyPointsSequence[timeStep, :] = bodyPoints
-        globalPointsSequence[timeStep, :] = globalPoints
+        strokePoints[timeStep, :] = _strokePoints
+        bodyPoints[timeStep, :] = _bodyPoints
+        globalPoints[timeStep, :] = _globalPoints
 
-        wingRotationMatrix_sequence[timeStep, :] = wingRotationMatrix
-        wingRotationMatrixTrans_sequence[timeStep, :] = wingRotationMatrixTrans
-        strokeRotationMatrix_sequence[timeStep, :] = strokeRotationMatrix
-        strokeRotationMatrixTrans_sequence[timeStep, :] = strokeRotationMatrixTrans
-        bodyRotationMatrix_sequence[timeStep, :] = bodyRotationMatrix
-        bodyRotationMatrixTrans_sequence[timeStep, :] = bodyRotationMatrixTrans
+        wingRotationMatrix[timeStep, :] = _wingRotationMatrix
+        wingRotationMatrixTrans[timeStep, :] = _wingRotationMatrixTrans
+        strokeRotationMatrix[timeStep, :] = _strokeRotationMatrix
+        strokeRotationMatrixTrans[timeStep, :] = _strokeRotationMatrixTrans
+        bodyRotationMatrix[timeStep, :] = _bodyRotationMatrix
+        bodyRotationMatrixTrans[timeStep, :] = _bodyRotationMatrixTrans
 
-        rotationMatrix_g_to_w[timeStep, :] = np.matmul(wingRotationMatrix, np.matmul(strokeRotationMatrix, bodyRotationMatrix))
-        rotationMatrix_w_to_g[timeStep, :] = np.matmul(np.matmul(bodyRotationMatrixTrans, strokeRotationMatrixTrans), wingRotationMatrixTrans)
+        rotationMatrix_g_to_w[timeStep, :] = np.matmul(_wingRotationMatrix, np.matmul(_strokeRotationMatrix, _bodyRotationMatrix))
+        rotationMatrix_w_to_g[timeStep, :] = np.matmul(np.matmul(_bodyRotationMatrixTrans, _strokeRotationMatrixTrans), _wingRotationMatrixTrans)
 
         #these are all the absolute unit vectors of the wing 
         #y_wing_g coincides with the tip only if R is normalized. 
-        # x_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
-        # y_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
-        # z_wing_g = np.matmul((np.matmul(np.matmul(strokeRotationMatrixTrans, wingRotationMatrixTrans), bodyRotationMatrixTrans)), np.array([[0], [0], [1]]))
-        x_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[1], [0], [0]]))))))
-        y_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[0], [1], [0]]))))))
-        z_wing_g = np.matmul(bodyRotationMatrixTrans, (np.matmul(strokeRotationMatrixTrans, (np.matmul(wingRotationMatrixTrans, np.array([[0], [0], [1]]))))))
+        # x_wing_g = np.matmul((np.matmul(np.matmul(_strokeRotationMatrixTrans, _wingRotationMatrixTrans), _bodyRotationMatrixTrans)), np.array([[1], [0], [0]]))
+        # y_wing_g = np.matmul((np.matmul(np.matmul(_strokeRotationMatrixTrans, _wingRotationMatrixTrans), _bodyRotationMatrixTrans)), np.array([[0], [1], [0]]))
+        # z_wing_g = np.matmul((np.matmul(np.matmul(_strokeRotationMatrixTrans, _wingRotationMatrixTrans), _bodyRotationMatrixTrans)), np.array([[0], [0], [1]]))
+        _x_wing_g = np.matmul(_bodyRotationMatrixTrans, (np.matmul(_strokeRotationMatrixTrans, (np.matmul(_wingRotationMatrixTrans, np.array([[1], [0], [0]]))))))
+        _y_wing_g = np.matmul(_bodyRotationMatrixTrans, (np.matmul(_strokeRotationMatrixTrans, (np.matmul(_wingRotationMatrixTrans, np.array([[0], [1], [0]]))))))
+        _z_wing_g = np.matmul(_bodyRotationMatrixTrans, (np.matmul(_strokeRotationMatrixTrans, (np.matmul(_wingRotationMatrixTrans, np.array([[0], [0], [1]]))))))
 
-        y_wing_s = np.matmul(wingRotationMatrixTrans, np.array([[0], [1], [0]]))
+        _y_wing_s = np.matmul(_wingRotationMatrixTrans, np.array([[0], [1], [0]]))
 
-        y_wing_g_sequence[timeStep, :] = y_wing_g.flatten()
-        z_wing_g_sequence[timeStep, :] = z_wing_g.flatten()
+        y_wing_g[timeStep, :] = _y_wing_g.flatten()
+        z_wing_g[timeStep, :] = _z_wing_g.flatten()
 
-        y_wing_s_sequence[timeStep, :] = y_wing_s.reshape(3,)
+        y_wing_s[timeStep, :] = _y_wing_s.reshape(3,)
 
-        y_wing_w = np.array([[0], [1], [0]])
-        z_wing_w = np.array([[0], [0], [1]])
-        y_wing_w_sequence[timeStep, :] = y_wing_w.reshape(3,)
-        z_wing_w_sequence[timeStep, :] = z_wing_w.reshape(3,)
+        _y_wing_w = np.array([[0], [1], [0]])
+        _z_wing_w= np.array([[0], [0], [1]])
+        y_wing_w[timeStep, :] = _y_wing_w.reshape(3,)
+        z_wing_w[timeStep, :] = _z_wing_w.reshape(3,)
 
-        rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
+        rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(_wingRotationMatrix, _bodyRotationMatrixTrans, _strokeRotationMatrixTrans, parameters[4], parameters_dt[4], parameters[5], 
                                     parameters_dt[5], parameters[6], parameters_dt[6])
 
         rots_wing_b[timeStep, :] = rot_wing_b
@@ -637,16 +637,16 @@ def main(cfd_run, folder_name):
 
         # u_infty = np.array([0.248, 0.0, 0.6]) #absolute wind velocity 
 
-        u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), y_wing_g.reshape(1,3)) + u_infty
+        u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), _y_wing_g.reshape(1,3)) + u_infty
         us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
 
-        u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix)
+        u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), _bodyRotationMatrix, _strokeRotationMatrix, _wingRotationMatrix)
         us_wing_w[timeStep, :] = u_wing_w
 
         #absolute mean flow velocity is defined as the (linear) sum of the absolute winG velocity and the absolute winD velocity 
         u_flight_g = u_wing_g
 
-        u_wind_w = getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
+        u_wind_w = getWindDirectioninWingReferenceFrame(u_flight_g, _bodyRotationMatrix, _strokeRotationMatrix, _wingRotationMatrix) - np.array(u_wing_w.reshape(3,1))
         us_wind_w[timeStep, :] = u_wind_w
 
         u_wing_g_magnitude = np.linalg.norm(u_wing_g)
@@ -660,14 +660,14 @@ def main(cfd_run, folder_name):
         e_dragVectors_wing_g[timeStep, :] = e_dragVector_wing_g
 
         #lift. lift vector is multiplied with the sign of alpha to have their signs match 
-        liftVector_g = np.cross(e_u_wing_g, y_wing_g.flatten())
+        liftVector_g = np.cross(e_u_wing_g, _y_wing_g.flatten())
         if isLeft == 0:
             liftVector_g = liftVector_g*np.sign(-alphas[timeStep])
         else:
             liftVector_g = liftVector_g*np.sign(alphas[timeStep])
         liftVectors[timeStep, :] = liftVector_g
 
-        aoa = getAoA(x_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1)) #use this one for getAoA with arccos 
+        aoa = getAoA(_x_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1)) #use this one for getAoA with arccos 
         # aoa = getAoA(e_u_wing_g, x_wing_g.flatten()) #use this one for getAoA with arctan 
         AoA[timeStep, :] = aoa
         liftVector_magnitude = np.sqrt(liftVector_g[0, 0]**2 + liftVector_g[0, 1]**2 + liftVector_g[0, 2]**2)
@@ -677,28 +677,28 @@ def main(cfd_run, folder_name):
             e_liftVector_g = liftVector_g
         e_liftVectors_g[timeStep, :] = e_liftVector_g
 
-        alphas_dt_sequence[timeStep] = alphas_dt
-        phis_dt_sequence[timeStep] = phis_dt
-        thetas_dt_sequence[timeStep] = thetas_dt
+        alphas_dt[timeStep] = _alphas_dt
+        phis_dt[timeStep] = _phis_dt
+        thetas_dt[timeStep] = _thetas_dt
 
-        alphas_dt_dt = (alphas[(timeStep+1)%nt] - 2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of alpha
-        phis_dt_dt = (phis[(timeStep+1)%nt] - 2*phis[timeStep] + phis[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of phi
-        thetas_dt_dt = (thetas[(timeStep+1)%nt] - 2*thetas[timeStep] + thetas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of theta
+        _alphas_dt_dt = (alphas[(timeStep+1)%nt] - 2*alphas[timeStep] + alphas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of alpha
+        _phis_dt_dt = (phis[(timeStep+1)%nt] - 2*phis[timeStep] + phis[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of phi
+        _thetas_dt_dt = (thetas[(timeStep+1)%nt] - 2*thetas[timeStep] + thetas[timeStep-1]) / (delta_t**2) #2nd order central difference approximation of 2nd derivative of theta
 
-        # phis_dt_dt = (phis_dt_sequence[(timeStep+1)%nt] - phis_dt_sequence[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of phi_dt
-        # thetas_dt_dt = (thetas_dt_sequence[(timeStep+1)%nt] - thetas_dt_sequence[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of theta_dt
+        # phis_dt_dt = (phis_dt[(timeStep+1)%nt] - phis_dt[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of phi_dt
+        # thetas_dt_dt = (thetas_dt[(timeStep+1)%nt] - thetas_dt[timeStep-1]) / (2*delta_t) #2nd order central difference approximation of 1st derivative of theta_dt
 
 
-        alphas_dt_dt_sequence[timeStep] = alphas_dt_dt
-        phis_dt_dt_sequence[timeStep] = phis_dt_dt
-        thetas_dt_dt_sequence[timeStep] = thetas_dt_dt
+        alphas_dt_dt[timeStep] = _alphas_dt_dt
+        phis_dt_dt[timeStep] = _phis_dt_dt
+        thetas_dt_dt[timeStep] = _thetas_dt_dt
 
         # #validation of our u_wing_g by means of a first order approximation
         # #left and right derivative: 
         # verifying_us_wing_g = np.zeros((nt, wingPoints.shape[0], 3))
-        # currentGlobalPoint = globalPointsSequence[timeStep]
-        # leftGlobalPoint = globalPointsSequence[timeStep-1]
-        # rightGlobalPoint = globalPointsSequence[(timeStep+1)%len(timeline)]
+        # currentGlobalPoint = globalPoints[timeStep]
+        # leftGlobalPoint = globalPoints[timeStep-1]
+        # rightGlobalPoint = globalPoints[(timeStep+1)%len(timeline)]
         # LHD = (currentGlobalPoint - leftGlobalPoint) / delta_t
         # RHD = (rightGlobalPoint - currentGlobalPoint) / delta_t
         # verifying_us_wing_g[timeStep, :] = (LHD+RHD)/2
@@ -724,7 +724,7 @@ def main(cfd_run, folder_name):
     #computation of M_CFD_w and F_CFD_w
     for i in range(nt):
         M_CFD_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], M_CFD_g[i, :])
-        # M_CFD_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], M_CFD_g[i, :])))
+        # M_CFD_w[i, :] = np.matmul(wingRotationMatrix[i, :], np.matmul(strokeRotationMatrix[i, :], np.matmul(bodyRotationMatrix[i, :], M_CFD_g[i, :])))
         # Mx_CFD_w_vector[i, :] = M_CFD_w[i, :]
         # Mx_CFD_w_vector[i, 1:3] = 0 
         
@@ -835,28 +835,28 @@ def main(cfd_run, folder_name):
         #calculation of forces not absorbing wing shape related and density of fluid terms into force coefficients
         Ftc_magnitude = 0.5*rho*Cl*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
         Ftd_magnitude = 0.5*rho*Cd*(planar_rots_wing_w_magnitude**2)*Ild #Nakata et al. 2015
-        Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence*Irot #Nakata et al. 2015
+        Frc_magnitude = rho*Crot*planar_rots_wing_w_magnitude*alphas_dt*Irot #Nakata et al. 2015
         Fam_magnitude = -Cam1*rho*np.pi/4*Iam*acc_wing_w[:, 2] -Cam2*rho*np.pi/8*Iam*rot_acc_wing_w[:, 1] #Cai et al. 2021 #second term should be time derivative of rots_wing_w 
-        Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence #Cai et al. 2021
+        Frd_magnitude = -1/6*rho*Crd*np.abs(alphas_dt)*alphas_dt #Cai et al. 2021
         #Fwe_magnitude = 1/2*rho*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)*Iwe*Cwe 
-        #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt_sequence)*np.sqrt(np.abs(phis_dt_sequence))*Iwe*Cwe
+        #Fwe_magnitude = 1/2*rho*phis*np.sign(phis_dt)*np.sqrt(np.abs(phis_dt))*Iwe*Cwe
 
         # #calculation of forces absorbing wing shape related and density of fluid terms into force coefficients
         # Ftc_magnitude = Cl*(planar_rots_wing_w_magnitude**2)
         # Ftd_magnitude = Cd*(planar_rots_wing_w_magnitude**2)
-        # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt_sequence
+        # Frc_magnitude = Crot*planar_rots_wing_w_magnitude*alphas_dt
         # Fam_magnitude = Cam1*acc_wing_w[:, 2] + Cam2*rot_acc_wing_w[:, 1]
-        # Frd_magnitude = Crd*np.abs(alphas_dt_sequence)*alphas_dt_sequence
+        # Frd_magnitude = Crd*np.abs(alphas_dt)*alphas_dt
         # # Fwe_magnitude = Cwe*rots_wing_w_magnitude*np.sqrt(rots_wing_w_magnitude)
 
         # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
         for i in range(nt):
             Ftc[i, :] = (Ftc_magnitude[i] * e_liftVectors_g[i])
             Ftd[i, :] = (Ftd_magnitude[i] * e_dragVectors_wing_g[i])
-            Frc[i, :] = (Frc_magnitude[i] * z_wing_g_sequence[i])
-            Fam[i, :] = (Fam_magnitude[i] * z_wing_g_sequence[i])
-            Frd[i, :] = (Frd_magnitude[i] * z_wing_g_sequence[i])
-            Fwe[i, :] = (Fwe_magnitude[i] * z_wing_g_sequence[i])
+            Frc[i, :] = (Frc_magnitude[i] * z_wing_g[i])
+            Fam[i, :] = (Fam_magnitude[i] * z_wing_g[i])
+            Frd[i, :] = (Frd_magnitude[i] * z_wing_g[i])
+            Fwe[i, :] = (Fwe_magnitude[i] * z_wing_g[i])
 
         Fx_QSM_g = Ftc[:, 0] + Ftd[:, 0] + Frc[:, 0] + Fam[:, 0] + Frd[:, 0] + Fwe[:, 0]
         Fy_QSM_g = Ftc[:, 1] + Ftd[:, 1] + Frc[:, 1] + Fam[:, 1] + Frd[:, 1] + Fwe[:, 1]
@@ -876,18 +876,18 @@ def main(cfd_run, folder_name):
             F_QSM_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], F_QSM_g[i, :])
             # Ftc_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], Ftc[i, :]) 
             # Ftd_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], Ftd[i, :])
-            # Frc_w[i, :] = (Frc_magnitude[i] * z_wing_w_sequence[i])
-            # Fam_w[i, :] = (Fam_magnitude[i] * z_wing_w_sequence[i])
-            # Frd_w[i, :] = (Frd_magnitude[i] * z_wing_w_sequence[i])
-            # Fwe_w[i, :] = (Fwe_magnitude[i] * z_wing_w_sequence[i])
+            # Frc_w[i, :] = (Frc_magnitude[i] * z_wing_w[i])
+            # Fam_w[i, :] = (Fam_magnitude[i] * z_wing_w[i])
+            # Frd_w[i, :] = (Frd_magnitude[i] * z_wing_w[i])
+            # Fwe_w[i, :] = (Fwe_magnitude[i] * z_wing_w[i])
 
             # Fz_QSM_w_vector[i, :] = F_QSM_w[i, :] 
             # Fz_QSM_w_vector[i, 0:2] = 0
-            # F_QSM_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], F_QSM_g[i, :])))
-            # F_QSM_gg[i, :] = np.matmul(bodyRotationMatrixTrans_sequence[i, :], np.matmul(strokeRotationMatrixTrans_sequence[i, :], np.matmul(wingRotationMatrixTrans_sequence[i, :], F_QSM_w[i, :])))
+            # F_QSM_w[i, :] = np.matmul(wingRotationMatrix[i, :], np.matmul(strokeRotationMatrix[i, :], np.matmul(bodyRotationMatrix[i, :], F_QSM_g[i, :])))
+            # F_QSM_gg[i, :] = np.matmul(bodyRotationMatrixTrans[i, :], np.matmul(strokeRotationMatrixTrans[i, :], np.matmul(wingRotationMatrixTrans[i, :], F_QSM_w[i, :])))
             # F_QSM_gg[i, :] = np.matmul(rotationMatrix_w_to_g[i, :], F_QSM_w[i, :])
             # F_QSM_w[i, :] = np.matmul(rotationMatrix_g_to_w[i, :], np.array([[1], [1], [1]]).reshape(3,))
-            # # F_QSM_w[i, :] = np.matmul(wingRotationMatrix_sequence[i, :], np.matmul(strokeRotationMatrix_sequence[i, :], np.matmul(bodyRotationMatrix_sequence[i, :], np.array([[1], [1], [1]]).reshape(3,))))
+            # # F_QSM_w[i, :] = np.matmul(wingRotationMatrix[i, :], np.matmul(strokeRotationMatrix[i, :], np.matmul(bodyRotationMatrix[i, :], np.array([[1], [1], [1]]).reshape(3,))))
 
         if show_plots:
 
@@ -940,7 +940,7 @@ def main(cfd_run, folder_name):
             axes[2, 0].legend()
 
             #alphas_dt
-            axes[2, 1].plot(timeline, alphas_dt_sequence)
+            axes[2, 1].plot(timeline, alphas_dt)
             axes[2, 1].set_xlabel('t/T [s]')
             axes[2, 1].set_ylabel('[˚/s]')
             axes[2, 1].set_title('Time derivative of alpha')
@@ -1032,7 +1032,7 @@ def main(cfd_run, folder_name):
             # plt.show()
             plt.savefig(folder_name+'/forces_figure.png', dpi=300)
 
-            # generatePlotsForKinematicsSequence()
+            generatePlotsForKinematicsSequence()
         return K_forces
 
     #optimization by means of opt.differential_evolution which calculates the global minimum of our cost function (def F) and tells us 
@@ -1322,4 +1322,4 @@ def main(cfd_run, folder_name):
 
     return np.append(x0_force_optimized, K0_forces_optimized), np.append(x0_moments_optimized, K0_moments_optimized), np.append(x0_power_optimized, K0_power_optimized)
 
-# main(cfd_run, 'post-processing2')
+main(cfd_run, 'post-processing2')
