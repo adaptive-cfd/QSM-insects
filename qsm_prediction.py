@@ -16,7 +16,7 @@ import functools
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from python_tools_master import insect_tools as it 
 from python_tools_master import wabbit_tools as wt
-from debug import writeArraytoFile
+from usefulFunctions import writeArraytoFile
 from datetime import datetime
 import time
 
@@ -31,18 +31,18 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
 
     #global variables:
 
-    isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'LeftWing', dtype=bool)
-    wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'WingShape', dtype=str)
+    isLeft = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'LeftWing', dtype=bool)
+    wingShape = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'WingShape', dtype=str)
     if 'from_file' in wingShape:
         wingShape_file = os.path.join(cfd_run, wingShape.replace('from_file::', ''))
-    time_max = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Time', 'time_max', dtype=float)
-    u_infty = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'ACM-new', 'u_mean_set', dtype=str)
+    time_max = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Time', 'time_max', dtype=float)
+    u_infty = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'ACM-new', 'u_mean_set', dtype=str)
     u_infty = u_infty.split(' ')
     u_infty = -np.float_(u_infty)
     # for component in u_infty:
     #     float(component)
     # u_infty = np.array(u_infty)
-    kinematics_file = wt.get_ini_parameter(cfd_run+'/PARAMS_diptera.ini', 'Insects', 'FlappingMotion_right', dtype=str)
+    kinematics_file = wt.get_ini_parameter(cfd_run+'/PARAMS.ini', 'Insects', 'FlappingMotion_right', dtype=str)
     if 'from_file' in kinematics_file:
         kinematics_file = os.path.join(cfd_run, kinematics_file.replace('from_file::', '')) 
     
@@ -1050,14 +1050,17 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             K_forces_optimized = optimization.fun
             print('Computing for: ' + str(nb) + ' blades')
             print('Completed in:', round(time.time() - start, 4), 'seconds')
+            print('x0_forces_optimized:', np.round(x0_forces_optimized, 5), '\nK_optimized_forces:', K_forces_optimized)
+            cost_forces(x0_forces_optimized, show_plots=True)
+            return x0_forces_optimized, K_forces_optimized
         else:
-            x0_forces_optimized = x0_forces
-            K_forces_optimized = ''
-            print('Computing for: ' + str(nb) + ' blades')
-            # cost_forces(x0_forces_optimized, nb, show_plots=True)
-        print('x0_forces_optimized:', np.round(x0_forces_optimized, 5), '\nK_optimized_forces:', K_forces_optimized)
-        cost_forces(x0_forces_optimized, show_plots=True)
-        return x0_forces_optimized, K_forces_optimized
+            _x0_forces = x0_forces
+            _K_forces = cost_forces(_x0_forces, show_plots=True)
+            # cost_forces(x0_moment_optimized, show_plots=True)
+            print('x0_forces:', np.round(_x0_forces, 5), '\nK_forces:', _K_forces)
+            # print('Completed in:', round(time.time() - start, 4), 'seconds')
+            return _x0_forces, _K_forces
+        
 
     # #optimizing using scipy.optimize.differential_evolution which is considerably slower than scipy.optimize.minimize
     # #the results also fluctuate quite a bit using this optimizer.
@@ -1217,15 +1220,19 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             x0_moments_optimized = optimization.x
             K_moments_optimized = optimization.fun
             print('Completed in:', round(time.time() - start, 4), 'seconds')
+            print('x0_moments_optimized:', np.round(x0_moments_optimized, 5), '\nK_moments_optimized:', K_moments_optimized)
+            cost_moments(x0_moments_optimized, show_plots=True)
+            return x0_moments_optimized, K_moments_optimized
         else:
-            x0_moments_optimized = x0_moments
-            K_moments_optimized = ''
+            _x0_moments = x0_moments
+            _K_moments = cost_moments(_x0_moments, show_plots=True)
             # cost_moments(x0_moment_optimized, show_plots=True)
-        print('x0_moments_optimized:', np.round(x0_moments_optimized, 5), '\nK_moments_optimized:', K_moments_optimized)
-        cost_moments(x0_moments_optimized, show_plots=True)
-        return x0_moments_optimized, K_moments_optimized
+            print('x0_moments:', np.round(_x0_moments, 5), '\nK_moments:', _K_moments)
+            # print('Completed in:', round(time.time() - start, 4), 'seconds')
+            return _x0_moments, _K_moments
 
     x0_moments_optimized, K0_moments_optimized = moment_optimization()
+
 
     #cost_power is defined in terms of the moments and power. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM power to its CFD counterpart
     def cost_power(x, show_plots=False):
@@ -1304,15 +1311,18 @@ def main(cfd_run, folder_name, optimize=False, x0_forces=None, x0_moments=None, 
             optimization = opt.minimize(cost_power, bounds=bounds, x0=x_0_power)
             x0_power_optimized = optimization.x
             K_power_optimized = optimization.fun
+            print('x0_power_optimized:', np.round(x0_power_optimized, 5), '\nK_power_optimized:', K_power_optimized)
+            cost_power(x0_power_optimized, show_plots=True)
             print('Completed in:', round(time.time() - start, 4), 'seconds')
+            return x0_power_optimized, K_power_optimized
         else:
-            x0_power_optimized = x0_power
-            K_power_optimized = ''
+            _x0_power = x0_power
+            _K_power = cost_power(_x0_power, show_plots=True)
             # cost_moments(x0_moment_optimized, show_plots=True)
-        print('x0_power_optimized:', np.round(x0_power_optimized, 5), '\nK_power_optimized:', K_power_optimized)
-        cost_power(x0_power_optimized, show_plots=True)
-        return x0_power_optimized, K_power_optimized
-    
+            print('x0_power:', np.round(_x0_power, 5), '\nK_power:', _K_power)
+            # print('Completed in:', round(time.time() - start, 4), 'seconds')
+            return _x0_power, _K_power
+        
     x0_power_optimized, K0_power_optimized = power_optimization()
 
     print('Whole run completed in:', round(time.time() - start_main, 4), 'seconds')

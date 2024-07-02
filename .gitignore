@@ -12,7 +12,7 @@ qsm_old.py
 convergence.py
 python_tools_master
 post_processing.py
-debug.py
+usefulFunctions.py
 post_analysis.py
 post_analysis_backup.py
 .DS_Store
