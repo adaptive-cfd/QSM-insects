@@ -46,11 +46,9 @@ class QSM:
         self.thetas_dtdt = np.zeros((nt))
                
         self.rots_wing_b = np.zeros((nt, 3, 1))
-        self.rots_wing_s = np.zeros((nt, 3, 1))
         self.rots_wing_w = np.zeros((nt, 3, 1))
         self.rots_wing_g = np.zeros((nt, 3, 1))
         
-        self.planar_rots_wing_s = np.zeros((nt, 3, 1))
         self.planar_rots_wing_w = np.zeros((nt, 3, 1))
         self.planar_rots_wing_g = np.zeros((nt, 3, 1))
                 
@@ -74,24 +72,24 @@ class QSM:
         self.ey_wing_g = np.zeros((nt, 3))
         self.ez_wing_g = np.zeros((nt, 3))
         self.ex_wing_g = np.zeros((nt, 3))
-        
-        self.ey_wing_s = np.zeros((nt, 3))
-        
+                
         self.ex_wing_w = np.zeros((nt, 3))
         self.ey_wing_w = np.zeros((nt, 3))
         self.ez_wing_w = np.zeros((nt, 3))
         
         self.e_Fam = np.zeros((nt, 3))
         
-        self.wingRotationMatrix = np.zeros((nt, 3, 3))
-        self.wingRotationMatrixTrans = np.zeros((nt, 3, 3))
-        self.strokeRotationMatrix = np.zeros((nt, 3, 3))
-        self.strokeRotationMatrixTrans = np.zeros((nt, 3, 3))
-        self.bodyRotationMatrix = np.zeros((nt, 3, 3))
-        self.bodyRotationMatrixTrans = np.zeros((nt, 3, 3))
+        self.M_wing = np.zeros((nt, 3, 3))
+        self.M_wing_inv = np.zeros((nt, 3, 3))
+        self.M_stroke = np.zeros((nt, 3, 3))
+        self.M_stroke_inv = np.zeros((nt, 3, 3))
+        self.M_body = np.zeros((nt, 3, 3))
+        self.M_body_inv = np.zeros((nt, 3, 3))
         
-        self.rotationMatrix_g_to_w = np.zeros((nt, 3, 3))
-        self.rotationMatrix_w_to_g = np.zeros((nt, 3, 3))
+        self.M_g2w = np.zeros((nt, 3, 3))
+        self.M_w2g = np.zeros((nt, 3, 3))
+        self.M_b2w = np.zeros((nt, 3, 3))
+        self.M_w2b = np.zeros((nt, 3, 3))
                         
         #global reference frame
         self.Ftc = np.zeros((nt, 3))
@@ -118,7 +116,8 @@ class QSM:
         self.Ftc_magnitude = np.zeros(nt)
         self.Ftd_magnitude = np.zeros(nt)
         self.Frc_magnitude = np.zeros(nt)
-        self.Fam_magnitude = np.zeros(nt)
+        self.Fam_z_magnitude = np.zeros(nt)
+        self.Fam_x_magnitude = np.zeros(nt)
         self.Frd_magnitude = np.zeros(nt)
         self.Fwe_magnitude = np.zeros(nt)
         
@@ -149,38 +148,43 @@ class QSM:
 
 
         what about eta etc? is not in the file
-
+        
         """
                 
         #generate rot wing calculates the angular velocity of the wing in all reference frames, as well as the planar angular velocity {𝛀(φ,Θ)} 
         #which will later be used to calculate the forces on the wing.  planar angular velocity {𝛀(φ,Θ)} comes from the decomposition of the motion
         #into 'translational' and rotational components, with the rotational component beig defined as ⍺ (the one around the y-axis in our convention)
         #this velocity is obtained by setting ⍺ to 0, as can be seen below
-        def generate_rot_wing(wingRotationMatrix, bodyRotationMatrixTrans, strokeRotationMatrixTrans, phi, phi_dt, alpha, alpha_dt, theta, theta_dt, wing): 
+        def generate_rot_wing(M_wing, M_body_inv, M_stroke_inv, phi, phi_dt, alpha, alpha_dt, theta, theta_dt, wing): 
             if wing == "right":
                 phi = -phi
                 phi_dt = -phi_dt
                 alpha = -alpha
                 alpha_dt = -alpha_dt
                 
-            phiMatrixTrans   = np.transpose(Rx(phi)) 
-            alphaMatrixTrans = np.transpose(Ry(alpha)) 
-            thetaMatrixTrans = np.transpose(Rz(theta))
+            # M_wing : M_s2w
+            # M_body_inv : M_b2g
+            # M_stroke_inv : M_s2b
+            rot_wing_s = [ [phi_dt-np.sin(theta)*alpha_dt],
+                           [np.cos(phi)*np.cos(theta)*alpha_dt-np.sin(phi)*theta_dt],
+                           [np.sin(phi)*np.cos(theta)*alpha_dt+np.cos(phi)*theta_dt] ]
+            rot_wing_w = np.matmul(M_wing, rot_wing_s)
+            rot_wing_b = np.matmul(M_stroke_inv, rot_wing_s)
+            rot_wing_g = np.matmul(M_body_inv, rot_wing_b)
             
-            vector_phi_dt = np.array([[phi_dt], [0], [0]])
-            vector_alpha_dt = np.array([[0], [alpha_dt], [0]])
-            vector_theta_dt = np.array([[0], [0], [theta_dt]])
+            # 'new' definition
+            planar_rot_wing_w = rot_wing_w.copy()
+            planar_rot_wing_w[1] = 0.0 # set y-component to zero
             
-            rot_wing_s = np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt+np.matmul(alphaMatrixTrans, vector_alpha_dt)))))
-            rot_wing_w = np.matmul(wingRotationMatrix, rot_wing_s)
-            rot_wing_b = np.matmul(strokeRotationMatrixTrans, rot_wing_s)
-            rot_wing_g = np.matmul(bodyRotationMatrixTrans, rot_wing_b)
+            planar_rot_wing_s = np.matmul( np.transpose(M_wing), planar_rot_wing_w ) # now in stroke frame
+            planar_rot_wing_b = np.matmul( M_stroke_inv, planar_rot_wing_s ) # now in body frame
+            planar_rot_wing_g = np.matmul( M_body_inv, planar_rot_wing_b ) # global frame
             
-            planar_rot_wing_s = np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))
-            planar_rot_wing_w = np.matmul(wingRotationMatrix, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt)))))
-            planar_rot_wing_g = np.matmul(bodyRotationMatrixTrans, np.matmul(strokeRotationMatrixTrans, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))))
+            # old definition
+            # planar_rot_wing_w = np.matmul(M_wing, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt)))))
+            # planar_rot_wing_g = np.matmul(M_body_inv, np.matmul(M_stroke_inv, np.matmul(phiMatrixTrans, (vector_phi_dt+np.matmul(thetaMatrixTrans, (vector_theta_dt))))))
            
-            return rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w #these are all (3x1) vectors 
+            return rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g, planar_rot_wing_w #these are all (3x1) vectors 
         
        
         # since the absolute linear velocity of the wing depends both on time and on the position along the wing
@@ -192,14 +196,14 @@ class QSM:
             return u_wing_g_position
 
         #this function calculates the linear velocity of the wing in the wing reference frame
-        def generate_u_wing_w(u_wing_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix):
-            u_wing_w = np.matmul(wingRotationMatrix, np.matmul(strokeRotationMatrix, np.matmul(bodyRotationMatrix, u_wing_g)))
+        def generate_u_wing_w(u_wing_g, M_body, M_stroke, M_wing):
+            u_wing_w = np.matmul(M_wing, np.matmul(M_stroke, np.matmul(M_body, u_wing_g)))
             return u_wing_w
 
-        def getWindDirectioninWingReferenceFrame(u_flight_g, bodyRotationMatrix, strokeRotationMatrix, wingRotationMatrix): 
-            u_wind_b = np.matmul(bodyRotationMatrix, u_flight_g.reshape(3,1))
-            u_wind_s = np.matmul(strokeRotationMatrix, u_wind_b)
-            u_wind_w = np.matmul(wingRotationMatrix, u_wind_s)
+        def getWindDirectioninWingReferenceFrame(u_flight_g, M_body, M_stroke, M_wing): 
+            u_wind_b = np.matmul(M_body, u_flight_g.reshape(3,1))
+            u_wind_s = np.matmul(M_stroke, u_wind_b)
+            u_wind_w = np.matmul(M_wing, u_wind_s)
             return u_wind_w
 
         #in this code AoA is defined as the arccos of the dot product between the unit vector along x direction and the unit vector of the absolute linear velocity
@@ -318,106 +322,111 @@ class QSM:
         
         dt, nt = self.delta_t, self.nt
         
-        # kinematics
-        for timeStep in range(self.nt):
+        # loop over time steps
+        for it in range(self.nt):
             #here the 1st time derivatives of the angles are calculated by means of 2nd order central difference approximations
-            self.alphas_dt[timeStep] = (self.alphas[(timeStep+1)%nt] - self.alphas[timeStep-1]) / (2*dt) #here we compute the modulus of (timestep+1) and nt to prevent overflowing. central difference 
-            self.phis_dt[timeStep]   = (self.phis[(timeStep+1)%nt]   -   self.phis[timeStep-1]) / (2*dt)
-            self.thetas_dt[timeStep] = (self.thetas[(timeStep+1)%nt] - self.thetas[timeStep-1]) / (2*dt)
+            self.alphas_dt[it] = (self.alphas[(it+1)%nt] - self.alphas[it-1]) / (2*dt) #here we compute the modulus of (it+1) and nt to prevent overflowing. central difference 
+            self.phis_dt[it]   = (self.phis[(it+1)%nt]   -   self.phis[it-1]) / (2*dt)
+            self.thetas_dt[it] = (self.thetas[(it+1)%nt] - self.thetas[it-1]) / (2*dt)
             
             # second order approx for second derivatives of input angles
-            self.alphas_dtdt[timeStep] = (self.alphas[(timeStep+1)%nt] -2*self.alphas[timeStep] + self.alphas[timeStep-1]) / (dt**2)
-            self.phis_dtdt[timeStep]   = (self.phis[(timeStep+1)%nt]   -2*self.phis[timeStep]   + self.phis[timeStep-1]  ) / (dt**2)
-            self.thetas_dtdt[timeStep] = (self.thetas[(timeStep+1)%nt] -2*self.thetas[timeStep] + self.thetas[timeStep-1]) / (dt**2)
+            self.alphas_dtdt[it] = (self.alphas[(it+1)%nt] -2*self.alphas[it] + self.alphas[it-1]) / (dt**2)
+            self.phis_dtdt[it]   = (self.phis[(it+1)%nt]   -2*self.phis[it]   + self.phis[it-1]  ) / (dt**2)
+            self.thetas_dtdt[it] = (self.thetas[(it+1)%nt] -2*self.thetas[it] + self.thetas[it-1]) / (dt**2)
 
-            alpha, phi, theta, eta, psi, beta, gamma = self.alphas[timeStep], self.phis[timeStep], self.thetas[timeStep], self.etas[timeStep], self.psis[timeStep], self.betas[timeStep], self.gammas[timeStep]
-            alpha_dt, phi_dt, theta_dt = self.alphas_dt[timeStep], self.phis_dt[timeStep], self.thetas_dt[timeStep]
+            alpha, phi, theta, eta, psi, beta, gamma = self.alphas[it], self.phis[it], self.thetas[it], self.etas[it], self.psis[it], self.betas[it], self.gammas[it]
+            alpha_dt, phi_dt, theta_dt = self.alphas_dt[it], self.phis_dt[it], self.thetas_dt[it]
             
-            M_wing   = insect_tools.M_wing(alpha, theta, phi, wing=self.wing)
-            M_stroke = insect_tools.M_stroke(eta, self.wing)
-            M_body   = insect_tools.M_body(psi, beta, gamma)
+            # define the many rotation matrices used in the code.
+            # The nomenclature M_wing, M_stroke and M_body is used in WABBIT/FLUSI insect_module.
+            # The (newer) nomenclature M_s2w, M_b2s, M_g2b is easier to understand.
+            M_wing   = insect_tools.M_wing(alpha, theta, phi, wing=self.wing) # M_s2w
+            M_stroke = insect_tools.M_stroke(eta, self.wing) # M_b2s
+            M_body   = insect_tools.M_body(psi, beta, gamma)# M_g2b
             M_g2w    = M_wing*M_stroke*M_body
-            M_w2g    = M_g2w.T
+            M_w2g    = np.transpose(M_g2w)
+            M_b2w    = M_wing*M_stroke
+            M_w2b    = np.transpose(M_b2w)
             
-            self.wingRotationMatrix[timeStep, :]        = M_wing
-            self.strokeRotationMatrix[timeStep, :]      = M_stroke
-            self.bodyRotationMatrix[timeStep, :]        = M_body
-            self.wingRotationMatrixTrans[timeStep, :]   = np.transpose(M_wing)
-            self.strokeRotationMatrixTrans[timeStep, :] = np.transpose(M_stroke)
-            self.bodyRotationMatrixTrans[timeStep, :]   = np.transpose(M_body)
+            self.M_wing[it, :]        = M_wing # M_s2w
+            self.M_stroke[it, :]      = M_stroke # M_b2s
+            self.M_body[it, :]        = M_body # M_g2b
+            self.M_wing_inv[it, :]    = np.transpose(M_wing) # M_w2s
+            self.M_stroke_inv[it, :]  = np.transpose(M_stroke) # M_s2b
+            self.M_body_inv[it, :]    = np.transpose(M_body) # M_b2g
         
-            self.rotationMatrix_g_to_w[timeStep, :]     = M_g2w
-            self.rotationMatrix_w_to_g[timeStep, :]     = M_w2g
+            self.M_g2w[it, :]     = M_g2w
+            self.M_w2g[it, :]     = M_w2g            
+            self.M_b2w[it, :]     = M_b2w
+            self.M_w2b[it, :]     = M_w2b
             
-            self.u_infty_w[timeStep, :] = (M_g2w * vct(self.u_infty_g)).flatten()
+            self.u_infty_w[it, :] = (M_g2w * vct(self.u_infty_g)).flatten()
         
             # these are all the absolute unit vectors of the wing 
             # ey_wing_g coincides with the tip only if R is normalized. 
             ex_wing_g = M_w2g   * vct([1,0,0])
             ey_wing_g = M_w2g   * vct([0,1,0])
-            ez_wing_g = M_w2g   * vct([0,0,1])        
-            ey_wing_s = M_wing.T * vct([0,1,0])
+            ez_wing_g = M_w2g   * vct([0,0,1])
             
         
-            self.ey_wing_g[timeStep, :] = ey_wing_g.flatten()
-            self.ez_wing_g[timeStep, :] = ez_wing_g.flatten()
-            self.ex_wing_g[timeStep, :] = ex_wing_g.flatten()
-            
-            self.ey_wing_s[timeStep, :] = ey_wing_s.reshape(3,)
-        
+            self.ey_wing_g[it, :] = ey_wing_g.flatten()
+            self.ez_wing_g[it, :] = ez_wing_g.flatten()
+            self.ex_wing_g[it, :] = ex_wing_g.flatten()
+                    
             
             ex_wing_w = np.array([[1], [0], [0]])
             ey_wing_w = np.array([[0], [1], [0]])
             ez_wing_w = np.array([[0], [0], [1]])
-            self.ex_wing_w[timeStep, :] = ex_wing_w.reshape(3,)
-            self.ey_wing_w[timeStep, :] = ey_wing_w.reshape(3,)
-            self.ez_wing_w[timeStep, :] = ez_wing_w.reshape(3,)
+            self.ex_wing_w[it, :] = ex_wing_w.reshape(3,)
+            self.ey_wing_w[it, :] = ey_wing_w.reshape(3,)
+            self.ez_wing_w[it, :] = ez_wing_w.reshape(3,)
+            
+            
+            # angular velocity of the wing        
+            rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g, planar_rot_wing_w = generate_rot_wing(
+                self.M_wing[it, :], self.M_body_inv[it, :], self.M_stroke_inv[it, :], 
+                phi, phi_dt, alpha, alpha_dt, theta, theta_dt, self.wing)            
         
-            rot_wing_g, rot_wing_b, rot_wing_s, rot_wing_w, planar_rot_wing_g, planar_rot_wing_s, planar_rot_wing_w = generate_rot_wing(
-                self.wingRotationMatrix[timeStep, :], self.bodyRotationMatrixTrans[timeStep, :], self.strokeRotationMatrixTrans[timeStep, :], 
-                phi, phi_dt, alpha, alpha_dt, theta, theta_dt, self.wing)
+            self.rots_wing_b[it, :] = rot_wing_b
+            self.rots_wing_w[it, :] = rot_wing_w
+            self.rots_wing_g[it, :] = rot_wing_g
         
-            self.rots_wing_b[timeStep, :] = rot_wing_b
-            self.rots_wing_s[timeStep, :] = rot_wing_s
-            self.rots_wing_w[timeStep, :] = rot_wing_w
-            self.rots_wing_g[timeStep, :] = rot_wing_g
-        
-            self.planar_rots_wing_s[timeStep, :] = planar_rot_wing_s
-            self.planar_rots_wing_w[timeStep, :] = planar_rot_wing_w
-            self.planar_rots_wing_g[timeStep, :] = planar_rot_wing_g
+            self.planar_rots_wing_w[it, :] = planar_rot_wing_w
+            self.planar_rots_wing_g[it, :] = planar_rot_wing_g
         
             self.planar_rots_wing_w_magnitude = norm( self.planar_rots_wing_w, axis=1).reshape(nt,)
+            
         
             u_wing_g = generate_u_wing_g_position(rot_wing_g.reshape(1,3), ey_wing_g.reshape(1,3)) + self.u_infty_g
-            self.us_wing_g[timeStep, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
+            self.us_wing_g[it, :] = (u_wing_g).reshape(3,1) #remember to rename variables since u_infty has been introduced! 
         
-            u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), self.bodyRotationMatrix[timeStep, :], self.strokeRotationMatrix[timeStep, :], self.wingRotationMatrix[timeStep, :])
-            self.us_wing_w[timeStep, :] = u_wing_w
+            u_wing_w = generate_u_wing_w(u_wing_g.reshape(3,1), self.M_body[it, :], self.M_stroke[it, :], self.M_wing[it, :])
+            self.us_wing_w[it, :] = u_wing_w
         
             
        
             u_wing_g_magnitude = norm(u_wing_g)
-            self.us_wing_g_magnitude[timeStep] = u_wing_g_magnitude
+            self.us_wing_g_magnitude[it] = u_wing_g_magnitude
         
             if u_wing_g_magnitude != 0:  
                 e_u_wing_g = u_wing_g/u_wing_g_magnitude
             else:
                 e_u_wing_g = u_wing_g 
             e_dragVector_wing_g = -e_u_wing_g
-            self.e_dragVectors_wing_g[timeStep, :] = e_dragVector_wing_g
+            self.e_dragVectors_wing_g[it, :] = e_dragVector_wing_g
         
             # lift. sign is determined below.
             liftVector_g = np.cross(e_u_wing_g, ey_wing_g.flatten())
 
             aoa = getAoA(ex_wing_g.reshape(1,3), e_u_wing_g.reshape(3,1)) #use this one for getAoA with arccos 
-            self.AoA[timeStep, :] = aoa
+            self.AoA[it, :] = aoa
                         
             liftVector_magnitude = np.sqrt(liftVector_g[0, 0]**2 + liftVector_g[0, 1]**2 + liftVector_g[0, 2]**2)
             if liftVector_magnitude != 0: 
                 e_liftVector_g = liftVector_g / liftVector_magnitude
             else:
                 e_liftVector_g = liftVector_g
-            self.e_liftVectors_g[timeStep, :] = e_liftVector_g
+            self.e_liftVectors_g[it, :] = e_liftVector_g
         
         
         #----------------------------------------------------------------------
@@ -462,14 +471,14 @@ class QSM:
         
             
         #calculation of wingtip acceleration and angular acceleration in wing reference frame 
-        for timeStep in range(nt):            
+        for it in range(nt):            
             # time derivative in inertial frame
-            self.acc_wing_g[timeStep, :] = (self.us_wing_g[(timeStep+1)%nt] - self.us_wing_g[timeStep-1])/(2*dt)
-            self.acc_wing_w[timeStep, :] = np.matmul(self.rotationMatrix_g_to_w[timeStep, :], self.acc_wing_g[timeStep, :])
+            self.acc_wing_g[it, :] = (self.us_wing_g[(it+1)%nt] - self.us_wing_g[it-1])/(2*dt)
+            self.acc_wing_w[it, :] = np.matmul(self.M_g2w[it, :], self.acc_wing_g[it, :])
         
             # time derivative in inertial frame
-            self.rot_acc_wing_g[timeStep, :] = (self.rots_wing_g[(timeStep+1)%nt] - self.rots_wing_g[timeStep-1]) / (2*dt) #central scheme
-            self.rot_acc_wing_w[timeStep, :] = np.matmul(self.rotationMatrix_g_to_w[timeStep, :], self.rot_acc_wing_g[timeStep, :])
+            self.rot_acc_wing_g[it, :] = (self.rots_wing_g[(it+1)%nt] - self.rots_wing_g[it-1]) / (2*dt) #central scheme
+            self.rot_acc_wing_w[it, :] = np.matmul(self.M_g2w[it, :], self.rot_acc_wing_g[it, :])
 
         if plot:
             ## FIGURE 1
@@ -540,14 +549,24 @@ class QSM:
             ax.set_title('Angular acceleration in wing reference frame')
             ax.legend()
 
-
+            plt.suptitle('Kinematics data')
 
             plt.tight_layout()
             plt.draw()
             
             for ax in axes.flatten():
                 insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
+
+
+    def print_force_coeefs(self):
+
+            x0 = self.x0_forces
             
+            # Cl and Cd definitions from Dickinson 1999
+            print("CL = %f + %f*sin( deg2rad*(2.13*AoA - 7.20) ) " % (x0[0],x0[1]) )
+            print("CD = %f + %f*cos( deg2rad*(2.04*AoA - 9.82) ) " % (x0[2],x0[3]) )
+            print("Cam1=%f Cam2=%f Cam3=%f (linear accel, normal force) \nCam4=%f Cam5=%f Cam6=%f (angular accel, normal force)\nCam7=%f Cam8=%f (ax, az: tangential force)" % (x0[5], x0[6], x0[8], x0[9], x0[10], x0[11],x0[12],x0[13]) )
+            print("C_rot=%f C_rd=%f" % (x0[4], x0[7]))
 
             
     def fit_to_CFD(self, cfd_run, paramsfile, T0=0.0, optimize=True, plot=True, N_trials=3):
@@ -618,8 +637,8 @@ class QSM:
         self.M_CFD_w = np.zeros_like( self.M_CFD_g )
         
         for i in range(self.nt):
-            self.M_CFD_w[i, :] = np.matmul(self.rotationMatrix_g_to_w[i, :], self.M_CFD_g[i, :])  
-            self.F_CFD_w[i, :] = np.matmul(self.rotationMatrix_g_to_w[i, :], self.F_CFD_g[i, :])
+            self.M_CFD_w[i, :] = np.matmul(self.M_g2w[i, :], self.M_CFD_g[i, :])  
+            self.F_CFD_w[i, :] = np.matmul(self.M_g2w[i, :], self.F_CFD_g[i, :])
             
         self.Fx_CFD_w = self.F_CFD_w[:,0]
         self.Fy_CFD_w = self.F_CFD_w[:,1]
@@ -701,46 +720,53 @@ class QSM:
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # rotational forces
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # self.Frc_magnitude = rho*Crot*self.planar_rots_wing_w_magnitude*self.alphas_dt*Irot #Nakata et al. 2015, Eqn. 2.6c
-            # self.Frd_magnitude = -1/6*rho*Crd*np.abs(self.alphas_dt)*self.alphas_dt#Cai et al. 2021, Eqn 2.13
-
             # These formulations differ slightly from the above classical ones, because we include the body velocity
-            # and use the angular velocity instead of alpha, alpha_dt
-            self.Frc_magnitude[:] = rho*Crot*self.us_wing_g_magnitude*self.rots_wing_w[:,1].flatten()*Irot #Nakata et al. 2015, Eqn. 2.6c
+            # and use the angular velocity instead of alpha, alpha_dt.
+            # Sane's original rotational force, "discovered" in Dickinson1999 and later modeled by Sane2002
+            self.Frc_magnitude[:] = rho*Crot*self.us_wing_g_magnitude*self.rots_wing_w[:,1].flatten()*Irot # Nakata et al. 2015, Eqn. 2.6c
+            
+            # Rotational drag: \cite{Cai2021}. The fact that the wing rotates around its rotation axis, which is the $y$ component of the angular velocity 
+            # (Which Cai identifies as $\dot{\alpha}$, even though this is only an approximation) induces a net non-zero velocity component normal 
+            # to the surface of the wing. In the opposite direction appears thus a drag force, and this is called rotaional drag. It would be 
+            # zero if leading- and trailing edge were symmetrical. Cai in general assumes all QSM forces are perpendicular to the wing, an 
+            # approximation he introduces but does not explain well. In their reference data, the force is indeed very normal to the wing. 
+            # However, why neglecting the non-normal part, unless very helpful?
+            # It is however correct that Cai says: as the Ellington terms do only include the velocity of the blade point on the 
+            # rotation axis (the point $(0,r,0)^T$), the rotation around that very axis ($y$) is not included in the traditional term. 
             self.Frd_magnitude[:] = -1/6*rho*Crd*np.abs(self.rots_wing_w[:,1].flatten())*self.rots_wing_w[:,1].flatten()#Cai et al. 2021, Eqn 2.13
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # added mass forces
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            # *Normal* adde mass force
+            # *Normal* added mass force
             # this most general formulation of the added mass force is inspired by
             # Whitney2010, 2.6.5. Eqn 2.40 gives the general form of the equation, and 
             # many authors assume the majority of the coefficients are zero (because 
             # the wing is thin). 
             #
             # Here, we simply use a general form, and include all components of the linear and angular 
-            # acceleration. We do, however, ignore the cross terms from Whitney2010. They wrote: ". Note that many
+            # acceleration. We do, however, ignore the cross terms from Whitney2010. They wrote: "Note that many
             # of the terms in (2.40) are ‘cross-term’ accelerations and not pure rotations. These will
-            # not be considered, as they will duplicate existing blade-element terms with similar
-            # forms, such as the rotational force and damping terms." 
+            # not be considered, as they will duplicate existing blade-element terms with similar forms, such 
+            #       as the rotational force and damping terms." 
             #
             # We follow this argument.
             #
             # There is a rather long discussion about this in VanVeen2022, 2.1.1., that vanVeen includes
             # tangential added mass forces. This is done below with the second added mass term.
-            self.Fam_magnitude = Cam1*self.acc_wing_w[:, 0] + Cam2*self.acc_wing_w[:, 1] + Cam3*self.acc_wing_w[:, 2] + Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] 
+            self.Fam_z_magnitude = Cam1*self.acc_wing_w[:, 0] + Cam2*self.acc_wing_w[:, 1] + Cam3*self.acc_wing_w[:, 2] + \
+                                   Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] 
             
             # *Tangential* added mass forces, like discussed in VanVeen2022, 2.1.1.
             # We assume however a more general form, which includes the components of the acceleration.
             # We do not include the acceleration in y-direction, even though it significantly reduces the error.
             # The reason is that apparently, this form has overlap with the lift+drag forces from the Ellington model
-            # and thus the resulting model becomes harder to interpret. ´
-            self.Fam_magnitude2 = np.zeros_like(self.Fam_magnitude)
-            self.Fam_magnitude2 = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 2]
+            # and thus the resulting model becomes harder to interpret.
+            self.Fam_x_magnitude = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 2]
             # this even more complete model that included all wing acceleration components proved not a big improvement
-            # and seems to have some overlap with the lift/drag definition, thus rendering interpretation mroe difficult.
+            # and seems to have some overlap with the lift/drag definition, thus rendering interpretation more difficult.
             # We therefore drop it.
-            ## self.Fam_magnitude2 = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 1] + Cam9*self.acc_wing_w[:, 2]
+            ## self.Fam_x_magnitude = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 1] + Cam9*self.acc_wing_w[:, 2]
             
 
             # vector calculation of Ftc, Ftd, Frc, Fam, Frd and Fwe arrays of the form (nt, 3).these vectors are in the global reference frame 
@@ -748,15 +774,15 @@ class QSM:
                 self.Ftc[:, k] = np.multiply(self.Ftc_magnitude, self.e_liftVectors_g[:,k])
                 self.Ftd[:, k] = np.multiply(self.Ftd_magnitude, self.e_dragVectors_wing_g[:,k])
 
-                # using e_liftVectors_g instead of ez_wing_g did makes approx. worse. 
+                # using e_liftVectors_g instead of ez_wing_g did makes approx. worse.
                 # (this was suggested in Cai et al. 2021, Appendix A, just below Eqn A4)
-                self.Frc[:, k] = np.multiply(self.Frc_magnitude, self.ez_wing_g[:,k])
+                self.Frc[:, k] = np.multiply(self.Frc_magnitude, self.ez_wing_g[:,k]) # Sane2002 also state its e_z, like Cai et al
                 self.Frd[:, k] = np.multiply(self.Frd_magnitude, self.ez_wing_g[:,k])
                 
                 # normal added mass force
-                self.Fam[:, k] = np.multiply(self.Fam_magnitude[:,0], self.ez_wing_g[:,k])
+                self.Fam[:, k] = np.multiply(self.Fam_z_magnitude[:,0], self.ez_wing_g[:,k])
                 # tangential added mass force
-                self.Fam2[:, k] = np.multiply(self.Fam_magnitude2[:,0], self.ex_wing_g[:,k])
+                self.Fam2[:, k] = np.multiply(self.Fam_x_magnitude[:,0], self.ex_wing_g[:,k])
                 
 
             # total force generated by QSM
@@ -797,15 +823,14 @@ class QSM:
                 axes[0, 0].legend(loc = 'upper right') 
 
                 #vertical forces
-                axes[0, 1].plot(self.timeline, self.Ftc[:, 2], label = 'Vertical lift force', color='gold')
-                axes[0, 1].plot(self.timeline, self.Frc[:, 2], label = 'Vertical rotational force', color='orange')
-                axes[0, 1].plot(self.timeline, self.Ftd[:, 2], label = 'Vertical drag force', color='lightgreen')
-                axes[0, 1].plot(self.timeline, self.Fam[:, 2], label = 'Vertical added mass force', color='red')
-                axes[0, 1].plot(self.timeline, self.Fam2[:, 2], '--',label = 'Vertical added mass force2', color='red')
-                axes[0, 1].plot(self.timeline, self.Frd[:, 2], label = 'Vertical rotational drag force', color='green')
-                # axes[0, 1].plot(timeline, Fwe[:, 2], label = 'Vertical wagner effect force')
-                axes[0, 1].plot(self.timeline, self.Fz_QSM_g, label = 'Vertical QSM force', ls='-.', color='blue')
-                axes[0, 1].plot(self.timeline, self.Fz_CFD_g, label = 'Vertical CFD force', ls='--', color='purple')
+                axes[0, 1].plot(self.timeline, self.Ftc[:, 2], label = 'Vert. part of F_{TC} (Ellington1984 lift force)', color='gold')
+                axes[0, 1].plot(self.timeline, self.Ftd[:, 2], label = 'Vert. part of F_{TD} (Ellington1984 drag force)', color='lightgreen')
+                axes[0, 1].plot(self.timeline, self.Frc[:, 2], label = 'Vert. part of F_{RC}  (Sane2002, rotational force)', color='orange')
+                axes[0, 1].plot(self.timeline, self.Fam[:, 2], label = 'Vert. part of normal added mass force (Whitney2010)', color='red')
+                axes[0, 1].plot(self.timeline, self.Fam2[:, 2], '--',label = 'Vert. part of tangential added mass force (vanVeen2022)', color='red')
+                axes[0, 1].plot(self.timeline, self.Frd[:, 2], label = 'Vert. part of F_{RD} rotational drag force (Cai2021, Nakata2015)', color='green')
+                axes[0, 1].plot(self.timeline, self.Fz_QSM_g, label = 'Total Vert. part of  QSM force', ls='-.', color='blue')
+                axes[0, 1].plot(self.timeline, self.Fz_CFD_g, label = 'Total Vert. part of  CFD force', ls='--', color='k')
                 axes[0, 1].set_xlabel('$t/T$')
                 axes[0, 1].set_ylabel('force')
                 axes[0, 1].set_title('Vertical components of forces in global coordinate system')
