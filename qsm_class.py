@@ -99,12 +99,12 @@ class QSM:
         self.planar_rots_wing_g = np.zeros((nt*nruns,3))
         self.planar_rots_wing_mag = np.zeros((nt*nruns))
                 
-        self.us_wing_w = np.zeros((nt*nruns,3))
-        self.us_wing_g = np.zeros((nt*nruns,3))
-        self.us_wing_g_mag = np.zeros((nt*nruns))
+        self.u_tip_w = np.zeros((nt*nruns,3))
+        self.u_tip_g = np.zeros((nt*nruns,3))
+        self.u_tip_mag = np.zeros((nt*nruns))
         
-        self.acc_wing_w = np.zeros((nt*nruns,3))
-        self.acc_wing_g = np.zeros((nt*nruns,3))
+        self.a_tip_w = np.zeros((nt*nruns,3))
+        self.a_tip_g = np.zeros((nt*nruns,3))
         
         self.rot_acc_wing_g = np.zeros((nt*nruns,3))
         self.rot_acc_wing_w = np.zeros((nt*nruns,3))
@@ -575,10 +575,10 @@ class QSM:
             self.planar_rots_wing_mag[it] = norm( planar_rot_wing_w )            
         
             u_wing_g = vect( generate_u_wing_g_position(rot_wing_g, ey_wing_g).flatten() + self.u_infty_g[it, :] )
-            self.us_wing_g[it, :] = u_wing_g.flatten()
-            self.us_wing_w[it, :] = (M_g2w * u_wing_g).flatten()
+            self.u_tip_g[it, :] = u_wing_g.flatten()
+            self.u_tip_w[it, :] = (M_g2w * u_wing_g).flatten()
             
-            self.us_wing_g_mag[it] = norm(u_wing_g)        
+            self.u_tip_mag[it] = norm(u_wing_g)        
             e_u_wing_g = normalize_vector(u_wing_g)
             
             self.e_drag_g[it :] = -e_u_wing_g.flatten()
@@ -591,11 +591,11 @@ class QSM:
               
         # calculation of wingtip acceleration and angular acceleration in wing reference frame 
         # a second loop over time is required, because we first need to compute ang. vel. then diff it here.
-        self.acc_wing_g[ii] = diff1( self.us_wing_g[ii], dt )
+        self.a_tip_g[ii] = diff1( self.u_tip_g[ii], dt )
         self.rot_acc_wing_g[ii] = diff1( self.rots_wing_g[ii], dt )
         
         for it in ii:               
-            self.acc_wing_w[it, :]     = np.matmul(self.M_g2w[it, :], self.acc_wing_g[it, :])
+            self.a_tip_w[it, :]     = np.matmul(self.M_g2w[it, :], self.a_tip_g[it, :])
             self.rot_acc_wing_w[it, :] = np.matmul(self.M_g2w[it, :], self.rot_acc_wing_g[it, :])
 
         
@@ -619,7 +619,7 @@ class QSM:
         # peaks at t=0.0 and t=1.0. The distance between peaks is 3/4 * 1/2, so we think that the two half-strokes 
         # occupy at most 3/8 and 5/8 of the complete cycle (maximum imbalance between up- and downstroke). This 
         # filters out smaller peaks (in height) automatically, so we are left with the two most likely candidates.
-        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.us_wing_g_mag[ii].flatten()] ), distance=3*self.nt/4/2)
+        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.u_tip_mag[ii].flatten()] ), distance=3*self.nt/4/2)
         ipeaks -= self.nt # shift (skip 1st periodic image)
         # keep only peaks in the original signal domain (remove periodic "ghosts")
         ipeaks = ipeaks[ipeaks>=0]
@@ -629,12 +629,12 @@ class QSM:
         # We must then look for a different way to determine reversals or set it manually.
         if len(ipeaks) != 2 :
             plt.figure()
-            plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.us_wing_g_mag[ii].flatten()]) ) )
+            plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.u_tip_mag[ii].flatten()]) ) )
             plt.xlabel('timeline (repeated identical cycle 3 times)')
-            plt.ylabel('us_wing_g_mag (wing=%s)' % (self.wing))
-            plt.plot( self.timeline[ipeaks]+0, -1*self.us_wing_g_mag[ipeaks], 'ro')
-            plt.plot( self.timeline[ipeaks]+1, -1*self.us_wing_g_mag[ipeaks], 'ro')
-            plt.plot( self.timeline[ipeaks]+2, -1*self.us_wing_g_mag[ipeaks], 'ro')
+            plt.ylabel('u_tip_mag (wing=%s)' % (self.wing))
+            plt.plot( self.timeline[ipeaks]+0, -1*self.u_tip_mag[ipeaks], 'ro')
+            plt.plot( self.timeline[ipeaks]+1, -1*self.u_tip_mag[ipeaks], 'ro')
+            plt.plot( self.timeline[ipeaks]+2, -1*self.u_tip_mag[ipeaks], 'ro')
             plt.title('Wing velocity minima detection: PROBLEM (more than 2 minima found)\n Note sign inversion (search max of negative-->min)')
             
             insect_tools.indicate_strokes(tstroke=2.0)
@@ -678,21 +678,21 @@ class QSM:
 
             # u_wing_w (tip velocity in wing reference frame )
             ax = axes[1,0]
-            ax.plot(self.timeline, self.us_wing_w[ii, 0], label='$u_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.us_wing_w[ii, 1], label='$u_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.us_wing_w[ii, 2], label='$u_{\\mathrm{wing},z}^{(w)}$')            
-            ax.plot(self.timeline, self.us_wing_g_mag[ii], 'k--', label='$\\left| \\underline{u}_{\\mathrm{wing}} \\right|$')
+            ax.plot(self.timeline, self.u_tip_w[ii, 0], label='$u_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.u_tip_w[ii, 1], label='$u_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.u_tip_w[ii, 2], label='$u_{\\mathrm{wing},z}^{(w)}$')            
+            ax.plot(self.timeline, self.u_tip_mag[ii], 'k--', label='$\\left| \\underline{u}_{\\mathrm{wing}} \\right|$')
             
             ax.set_xlabel('$t/T$')
             ax.set_ylabel('[Rf]')
-            ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left(\\left|\\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.us_wing_g_mag)))
+            ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left(\\left|\\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.u_tip_mag)))
             ax.legend()
 
             #a_wing_w (tip acceleration in wing reference frame )
             ax = axes[1,1]
-            ax.plot(self.timeline, self.acc_wing_w[ii, 0], label='$\\dot{u}_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.acc_wing_w[ii, 1], label='$\\dot{u}_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.acc_wing_w[ii, 2], label='$\\dot{u}_{\\mathrm{wing},z}^{(w)}$')
+            ax.plot(self.timeline, self.a_tip_w[ii, 0], label='$\\dot{u}_{\\mathrm{wing},x}^{(w)}$')
+            ax.plot(self.timeline, self.a_tip_w[ii, 1], label='$\\dot{u}_{\\mathrm{wing},y}^{(w)}$')
+            ax.plot(self.timeline, self.a_tip_w[ii, 2], label='$\\dot{u}_{\\mathrm{wing},z}^{(w)}$')
             ax.set_xlabel('$t/T$')
             ax.set_ylabel('$Rf^2$')
             ax.set_title('Tip acceleration in wing reference frame')
@@ -820,7 +820,7 @@ class QSM:
             times.append(self.timeline+irun)
         tt = np.hstack(times)
         
-        
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # remove nans and infs, and hope for the best
         self.F_CFD_g[np.isinf(self.F_CFD_g)] = 0
         self.F_CFD_g[np.isnan(self.F_CFD_g)] = 0
@@ -829,11 +829,10 @@ class QSM:
         self.M_CFD_g[np.isinf(self.M_CFD_g)] = 0
         self.M_CFD_g[np.isnan(self.M_CFD_g)] = 0
         self.M_CFD_w[np.isinf(self.M_CFD_w)] = 0
-        self.M_CFD_w[np.isnan(self.M_CFD_w)] = 0
-        
+        self.M_CFD_w[np.isnan(self.M_CFD_w)] = 0        
         self.P_CFD[np.isinf(self.P_CFD)] = 0
         self.P_CFD[np.isnan(self.P_CFD)] = 0
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
         def getAerodynamicCoefficients(self, x0, AoA): 
             deg2rad = np.pi/180.0 
@@ -884,15 +883,15 @@ class QSM:
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Ellingtons lift/drag forces, following Cai et al 2021. Note many other papers dealt with hovering
             # flight, which features zero cruising speed. Cai et al is a notable exception. Instead of the more
-            # common planar_rots_wing_mag, he used us_wing_g_mag, which includes the flight velocity
+            # common planar_rots_wing_mag, he used u_tip_mag, which includes the flight velocity
             # and thus delivers nonzero values even for still wings. Cai integrated over the blades, and each blade 
             # had the correct velocity. This can be done analytically, as we do here, see my lecture notes. 
             if model_terms[0] is True:
                 # self.Ftc_mag = 0.5*rho*Cl*(self.planar_rots_wing_mag**2)*Ild
                 # self.Ftd_mag = 0.5*rho*Cd*(self.planar_rots_wing_mag**2)*Ild
                 
-                # self.Ftc_mag = 0.5*rho*Cl*(self.us_wing_g_mag**2)*self.S2
-                # self.Ftd_mag = 0.5*rho*Cd*(self.us_wing_g_mag**2)*self.S2
+                # self.Ftc_mag = 0.5*rho*Cl*(self.u_tip_mag**2)*self.S2
+                # self.Ftd_mag = 0.5*rho*Cd*(self.u_tip_mag**2)*self.S2
                 
                 A = self.planar_rots_wing_mag**2
                 B = 2.0*(self.u_infty_w[:,2]*self.rots_wing_w[:,0]-self.u_infty_w[:,0]*self.rots_wing_w[:,2])
@@ -908,7 +907,7 @@ class QSM:
             # and use the angular velocity instead of alpha, alpha_dt.
             # Sane's original rotational force, "discovered" in Dickinson1999 and later modeled by Sane2002
             if model_terms[1] is True:
-                self.Frc_mag = rho*Crot*self.us_wing_g_mag*self.rots_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
+                self.Frc_mag = rho*Crot*self.u_tip_mag*self.rots_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
                 # self.Frc_mag[:] = rho*Crot*self.planar_rots_wing_mag*self.rots_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
             
             # Rotational drag: \cite{Cai2021}. The fact that the wing rotates around its rotation axis, which is the $y$ component of the angular velocity 
@@ -939,10 +938,9 @@ class QSM:
             #
             # We follow this argument.
             #
-# TODO: check if no RHO in here
             if model_terms[3] is True:
-                self.Fam_z_mag = Cam1*self.acc_wing_w[:, 0] + Cam2*self.acc_wing_w[:, 1] + Cam3*self.acc_wing_w[:, 2] + \
-                                 Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] 
+                self.Fam_z_mag = rho*(Cam1*self.a_tip_w[:, 0] + Cam2*self.a_tip_w[:, 1] + Cam3*self.a_tip_w[:, 2] + \
+                                 Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] )
                  
             
             # *Tangential* added mass forces, like discussed in VanVeen2022, 2.1.1.
@@ -951,12 +949,12 @@ class QSM:
             # The reason is that apparently, this form has overlap with the lift+drag forces from the Ellington model
             # and thus the resulting model becomes harder to interpret.
             if model_terms[4] is True:
-                self.Fam_x_mag = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 2]
+                self.Fam_x_mag = rho*(Cam7*self.a_tip_w[:, 0] + Cam8*self.a_tip_w[:, 2])
 
             # this even more complete model that included all wing acceleration components proved not a big improvement
             # and seems to have some overlap with the lift/drag definition, thus rendering interpretation more difficult.
             # We therefore drop it.
-            ## self.Fam_x_mag = Cam7*self.acc_wing_w[:, 0] + Cam8*self.acc_wing_w[:, 1] + Cam9*self.acc_wing_w[:, 2]
+            ## self.Fam_x_mag = Cam7*self.a_tip_w[:, 0] + Cam8*self.a_tip_w[:, 1] + Cam9*self.a_tip_w[:, 2]
             
 
             # vector calculation of Ftc, Ftd, Frc, Fam, Frd arrays of the form (nt, 3).these vectors are in the global reference frame 
