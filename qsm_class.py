@@ -519,7 +519,7 @@ class QSM:
                 self.u_infty_g[it, :] = u_infty_g
 
             if verbose and it == ii[0]:
-                print("u_infty_g = [%f, %f, %f]" % (self.u_infty_g[it, 0],self.u_infty_g[it, 2],self.u_infty_g[it, 2]))
+                print("u_infty_g = [%f, %f, %f]" % (self.u_infty_g[it, 0],self.u_infty_g[it, 1],self.u_infty_g[it, 2]))
 
             alpha, phi, theta, eta, psi, beta, gamma = self.alphas[it], self.phis[it], self.thetas[it], self.etas[it], self.psis[it], self.betas[it], self.gammas[it]
             alpha_dt, phi_dt, theta_dt = self.alphas_dt[it], self.phis_dt[it], self.thetas_dt[it]
@@ -713,6 +713,8 @@ class QSM:
             ax.plot(self.timeline, self.rot_acc_wing_w[ii, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
             ax.plot(self.timeline, self.rot_acc_wing_w[ii, 1], label='$\\dot\\Omega_{\\mathrm{wing},y}^{(w)}$')
             ax.plot(self.timeline, self.rot_acc_wing_w[ii, 2], label='$\\dot\\Omega_{\\mathrm{wing},z}^{(w)}$')
+            
+            ax.plot(self.timeline, np.sqrt(self.rot_acc_wing_w[ii, 0]**2+self.rot_acc_wing_w[ii, 1]**2+self.rot_acc_wing_w[ii, 2]**2), 'k--', label='mag')
             ax.set_xlabel('$t/T$')
             ax.set_ylabel('[rad/T²]')
             ax.set_title('Angular acceleration in wing reference frame')
@@ -725,7 +727,6 @@ class QSM:
             
             for ax in axes.flatten():
                 insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
-
 
     def print_force_coeefs(self):
 
