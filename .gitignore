@@ -2,22 +2,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-post-processing
-.vscode
-post-processing_absorbed
-post-processing2
-debug
-debug_images
-qsm_old.py
-convergence.py
+wabbit_tools.py 
+insect_tools.py
 python_tools_master
-post_processing.py
-usefulFunctions.py
-post_analysis.py
-post_analysis_backup.py
-.DS_Store
-parse_data.py
-post_analysis/
-DATA.json
-intact_wing/
-junk.py
+finite_differences.py
