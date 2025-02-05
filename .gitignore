@@ -1,8 +1,0 @@
-__pycache__/
-*.py[cod]
-*$py.class
-
-wabbit_tools.py 
-insect_tools.py
-python_tools_master
-finite_differences.py
