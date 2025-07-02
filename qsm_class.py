@@ -14,6 +14,7 @@ import scipy
 import time
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
+import finite_differences
 
 # use latex
 plt.rcParams["text.usetex"] = True
@@ -36,27 +37,7 @@ def normalize_vector( vector ):
 
     return vector
 
-def diff1(x, dt):
-    # differentiate vector x with respect to time
-    # use non-periodic, second order finite differences for that
-    # note current version of qsm_class does require one-sided FD stencils
-    # because concatenating many CFD runs does result in non-periodic data.
-    import finite_differences
 
-    D = finite_differences.D12(x.shape[0], dt)
-
-    return np.matmul(D, x).reshape(x.shape)
-
-def diff2(x, dt):
-    # differentiate vector x with respect to time
-    # use non-periodic, second order finite differences for that
-    # note current version of qsm_class does require one-sided FD stencils
-    # because concatenating many CFD runs does result in non-periodic data.
-    import finite_differences
-
-    D = finite_differences.D22(x.shape[0], dt)
-
-    return np.matmul(D, x).reshape(x.shape)
 
 def apply_rotations_to_vectors(M, x):
     """
@@ -94,7 +75,7 @@ class QSM:
         self.nt = nt
         self.model_CL_CD = model_CL_CD
         self.nruns = nruns
-
+        
         # as a means of informing the user that they need to read CFD data before fitting (training)
         self.readAtLeastOneCFDrun = False
 
@@ -102,7 +83,7 @@ class QSM:
             self.timeline = np.linspace(0, 1, nt, endpoint=False)
         else:
             self.timeline = timeline
-        self.delta_t = self.timeline[1] - self.timeline[0]
+        self.dt = self.timeline[1] - self.timeline[0]
 
         self.alpha_dt = np.zeros((nt*nruns))
         self.phi_dt   = np.zeros((nt*nruns))
@@ -131,7 +112,6 @@ class QSM:
         self.rot_acc_wing_w = np.zeros((nt*nruns,3))
 
         self.AoA = np.zeros((nt*nruns))
-        self.AoA_whitney = np.zeros((nt*nruns))
         self.e_drag_g = np.zeros((nt*nruns,3))
         self.e_lift_g = np.zeros((nt*nruns,3))
         self.e_lift_b = np.zeros((nt*nruns,3))        
@@ -200,12 +180,19 @@ class QSM:
         self.alpha = np.zeros((nt*nruns))
         self.phi = np.zeros((nt*nruns))
         self.theta = np.zeros((nt*nruns))
+        
+        # to save computing time, fill differentiation matrices only once
+        self.D1 = finite_differences.D12(self.nt, self.dt)
+        self.D2 = finite_differences.D22(self.nt, self.dt)
+
 
     def parse_many_run_directorys(self, run_directories, params_file, kinematics_file, T0=1.0, wing='right', plot=False):
         """
         This function is for reading in a bunch of CFD runs in order to fit a single
         QSM model to many runs. It parses the kinematics data (either kinematics.t or an *.ini
         file), and reads in the CFD data for the forces, moments, power.
+        
+        params_file: just the file (not the complete path, i.e., we look in the folders run_directories each time for this file)
 
         TODO:
         Same INI file all runs?
@@ -313,36 +300,39 @@ class QSM:
             plt.savefig( fname_out )
 
     def parse_kinematics(self, params_file, kinematics_file=None, u_infty_g=None, plot=True, wing='auto', yawpitchroll0=None, eta_stroke=None, i0=0,
-                         alpha=None, phi=None, theta=None, eta=None, psi=None, beta=None, gamma=None, verbose=True):
+                         alpha=None, phi=None, theta=None, psi=None, beta=None, gamma=None, verbose=True):
         """
-        Evaluate the kinematics given by kinematics_file and store the results
-        in the class arrays. You must run this before you can fit the QSM to the CFD data.
+        Evaluate the kinematics (i.e. compute many rotation matrices etc) and store the results
+        in the QSM class arrays. You must run this before you can fit the QSM to the CFD data.
 
         There are 3 ways to read kinematics:
-            1/ Reading kinematics.t from an existing CFD simulation (i.e. a run that has been simulated)
+            _1_ Reading kinematics.t from an existing CFD simulation (i.e. a run that has been simulated)
 
-            2/ Reading an INI file for wingbeat kinematics (the input for CFD runs, but not necessarily a run that has been simulated)
+            _2_ Reading an INI file for wingbeat kinematics (the input for CFD runs, but not necessarily a run that has been simulated)
 
-            3/ Passing externally generated kinematics: alpha, phi, theta, eta, psi, beta, gamma as vectors sampled on equidistant time vector.
-            Use QSM.timeline as time vector.
-            Do not pass kinematics_file in this case (=None). The angles you pass shall be in DEGREE.
+            _3_ Passing externally generated kinematics: alpha, phi, theta, eta_stroke, psi, beta, gamma as vectors sampled on equidistant time vector.
+            Use QSM.timeline as time vector. Do not pass `kinematics_file` in this case (=None). The angles you pass shall be in DEGREE.
 
         Parameters
         ----------
         params_file : string
             Parameter file (INI) of the simulation. Used to determine which wing we model, flight velocity etc.
+            Note that if you pass all parameter as arguments to this function, you do not need to pass a valid *.ini
+            file and can just pass None.
         kinematics_file : string
             The kinematics file can be either:
-                - "kinematics.t", the output log file of a CFD run
-                - an *.ini file, which is the CFD-code's descriptor file for kinematics
+                - "kinematics.t", the output log file of a CFD run (mode _1_)
+                - an *.ini file, which is the CFD-code's descriptor file for kinematics (mode _2_)
+                - None (mode _3_)
         u_infty_g : vector, optional
             Flight velocity of the animal. Default: read from params_file, overwritten if you pass a value explicitly.
             Note how the params_file contains the wind velocity (wind tunnel speed), and we invert its sign to get the
             animals flight speed. If you pass the parameter directly, give flight speed not wind tunnel speed.
         plot : bool, optional
             Plot raw kinematics or not. The default is True.
-        wing : TYPE, optional
-            DESCRIPTION. The default is 'auto'.
+        wing : str
+            Which side is the wing kinematics we parse ('auto', 'left', 'right'). The default is 'auto' - in this case 
+            it is read from the `params_file` *.ini file.
         yawpitchroll0 : TYPE, optional
             If you pass kinematics.t as kinematics_file, yaw pitch roll are determined from there, but you
             can overwrite it with the (constant) value you pass. Useful for optimization problems.
@@ -350,47 +340,33 @@ class QSM:
             You can omit this parameter if you read the kinematics from a CFD run *that is already done*
             (which I guess is the usual case). The log-file kinematics.t contains the eta_stroke as well
             as body posture angles.
+            
+        Parameters for Mode _3_
+        -----------------------
+        
+        alpha, phi, theta, psi, beta, gamma, eta_stroke : np.ndarray of shape [nt]
+            The various angles (feathering, flapping, deviation, roll, pitch, yaw, stoke plane)
 
         """
-        nt = self.nt
-        # index range to store the data to
+        dt, nt = self.dt, self.nt
+
+        # index range to store the data to (used is several runs are parsed)
         ii = np.arange(start=i0, stop=i0+nt-1+1 )
+        
 
-        #generate rot wing calculates the angular velocity of the wing in all reference frames, as well as the planar angular velocity {𝛀(φ,Θ)}
-        #which will later be used to calculate the forces on the wing.  planar angular velocity {𝛀(φ,Θ)} comes from the decomposition of the motion
-        #into 'translational' and rotational components, with the rotational component beig defined as ⍺ (the one around the y-axis in our convention)
-        #this velocity is obtained by setting ⍺ to 0, as can be seen below
-        def generate_rot_wing(M_s2w, M_b2g, M_s2b, phi, phi_dt, alpha, alpha_dt, theta, theta_dt, wing):
-            if wing != "left" and wing != "right" and wing != "left2" and wing != "right2":
-                raise ValueError("Wing not known (I know of left/right/left2/right2)")
+        def diff1(x, dt):
+            # differentiate vector x with respect to time
+            # use non-periodic, second order finite differences for that
+            # note current version of qsm_class does require one-sided FD stencils
+            # because concatenating many CFD runs does result in non-periodic data.
+            return np.matmul(self.D1, x)#.reshape(x.shape)
 
-            if wing == "right" or wing == "right2":
-                phi = -phi
-                phi_dt = -phi_dt
-                alpha = -alpha
-                alpha_dt = -alpha_dt
-
-            rot_wing_s = np.asarray([ phi_dt-np.sin(theta)*alpha_dt, \
-                           np.cos(phi)*np.cos(theta)*alpha_dt-np.sin(phi)*theta_dt, \
-                           np.sin(phi)*np.cos(theta)*alpha_dt+np.cos(phi)*theta_dt])
-            rot_wing_w = M_s2w @ rot_wing_s
-            rot_wing_b = M_s2b @ rot_wing_s
-            rot_wing_g = M_b2g @ rot_wing_b
-
-            # 'new' definition
-            planar_rot_wing_w = rot_wing_w.copy()
-            planar_rot_wing_w[1] = 0.0 # set y-component to zero
-
-            planar_rot_wing_s = np.transpose(M_s2w) @ planar_rot_wing_w # now in stroke frame
-            planar_rot_wing_b = M_s2b @ planar_rot_wing_s # now in body frame
-            planar_rot_wing_g = M_b2g @ planar_rot_wing_b # global frame
-
-            return rot_wing_g, rot_wing_b, rot_wing_w, planar_rot_wing_g, planar_rot_wing_w
-
-        #in this code AoA is defined as the arccos of the dot product between the unit vector along x direction and the unit vector of the absolute linear velocity
-        def getAoA(ex_wing_g, e_u_wing_g):
-            AoA = np.arccos(np.dot(ex_wing_g, e_u_wing_g))
-            return AoA
+        def diff2(x, dt):
+            # differentiate vector x with respect to time
+            # use non-periodic, second order finite differences for that
+            # note current version of qsm_class does require one-sided FD stencils
+            # because concatenating many CFD runs does result in non-periodic data.
+            return np.matmul(self.D2, x)#.reshape(x.shape)
 
         # left or right wing?
         if wing == 'auto':
@@ -410,26 +386,36 @@ class QSM:
         elif wing != 'auto' and wing != 'left' and wing != 'right' and wing != 'left2' and wing != 'right2':
             raise ValueError("Invalid choice for wing (auto/left/right/left2/right2)")
 
-
+        # wing can be left/right/left2/right2
         self.wing = wing
+        # side can only be left or right
+        side = self.wing.replace("2","")
 
         if kinematics_file == None:
-            for angle in [alpha, phi, theta, eta, psi, beta, gamma]:
+            #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # MODE _3_:
+            # kinematics given directly as input vectors
+            #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            for angle in [alpha, phi, theta, eta_stroke, psi, beta, gamma]:
                 if angle.shape[0] != self.nt:
                     raise ValueError("The kinematics angles you pass to this routine need to have the same length as nt=QSM.timeline.shape[0]")
 
             self.psi[ii]   = psi*deg2rad
             self.beta[ii]  = beta*deg2rad
             self.gamma[ii] = gamma*deg2rad
-            self.eta[ii]   = eta*deg2rad
+            self.eta[ii]   = eta_stroke*deg2rad
             self.alpha[ii] = alpha*deg2rad
             self.phi[ii]   = phi*deg2rad
             self.theta[ii] = theta*deg2rad
 
         else:
             if "kinematics.t" in kinematics_file:
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # MODE _1_:
+                # read kinematics.t (this is a pre-computed CFD run)
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 # load kinematics data by means of load_t_file function from insect_tools library
-                kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline)
+                kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline, verbose=verbose)
 
                 self.psi[ii]   = kinematics_cfd[:, 4].copy()
                 self.beta[ii]  = kinematics_cfd[:, 5].copy()
@@ -483,6 +469,9 @@ class QSM:
                     raise ValueError("Wing code unknown (left/right/left2/right2)")
 
             elif ".ini" in kinematics_file:
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # MODE _2_
+                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 # load kinematics data by means of eval_angles_kinematics_file function from insect_tools library
                 timeline, phi, alpha, theta = insect_tools.eval_angles_kinematics_file(fname=kinematics_file, time=self.timeline)
 
@@ -504,9 +493,12 @@ class QSM:
 
             else:
                 raise ValueError("Parsing kinematics is possible with kinematics.t, kinematics.ini or manually passing the angles.")
+                
 
-        dt, nt = self.delta_t, self.nt
 
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Done with the input, now parsing.
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         self.alpha_dt[ii] = diff1( self.alpha[ii], dt )
         self.phi_dt[ii]   = diff1( self.phi[ii], dt )
         self.theta_dt[ii] = diff1( self.theta[ii], dt )
@@ -515,70 +507,78 @@ class QSM:
         self.phi_dtdt[ii]   = diff2( self.phi[ii], dt )
         self.theta_dtdt[ii] = diff2( self.theta[ii], dt )
 
+        # define the many rotation matrices used in the code
+        self.M_g2b[ii,:,:] = insect_tools.get_many_M_g2b(self.psi[ii], self.beta[ii], self.gamma[ii])
+        self.M_s2w[ii,:,:] = insect_tools.get_many_M_s2w(self.alpha[ii], self.theta[ii], self.phi[ii], side)
+        self.M_b2s[ii,:,:] = insect_tools.get_many_M_b2s(self.eta[ii], side)
+        self.M_b2w[ii,:,:] = insect_tools.get_many_M_b2w(self.alpha[ii], self.theta[ii], self.phi[ii], self.eta[ii], side)
+        self.M_g2w[ii,:,:] = self.M_b2w[ii,:,:] @ self.M_g2b[ii,:,:]
 
-        # MAIN loop over time steps
-        for it in ii:
-            # insects cruising speed
-            if u_infty_g is None:
-                self.u_infty_g[it, :] = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
-            else:
-                self.u_infty_g[it, :] = u_infty_g
+        self.M_w2s[ii,:,:] = self.M_s2w[ii,:,:].transpose(0, 2, 1)
+        self.M_s2b[ii,:,:] = self.M_b2s[ii,:,:].transpose(0, 2, 1)
+        self.M_w2b[ii,:,:] = self.M_b2w[ii,:,:].transpose(0, 2, 1)
+        self.M_b2g[ii,:,:] = self.M_g2b[ii,:,:].transpose(0, 2, 1)
+        self.M_w2g[ii,:,:] = self.M_g2w[ii,:,:].transpose(0, 2, 1)
 
-            if verbose and it == ii[0]:
-                print("u_infty_g = [%f, %f, %f]" % (self.u_infty_g[it, 0],self.u_infty_g[it, 1],self.u_infty_g[it, 2]))
-
-            alpha, phi, theta, eta, psi, beta, gamma = self.alpha[it], self.phi[it], self.theta[it], self.eta[it], self.psi[it], self.beta[it], self.gamma[it]
-            alpha_dt, phi_dt, theta_dt = self.alpha_dt[it], self.phi_dt[it], self.theta_dt[it]
-
-            side = self.wing.replace("2","")
-
-            # define the many rotation matrices used in the code
-            self.M_b2s[it,:,:] = insect_tools.get_M_b2s(eta, side)
-            self.M_s2b[it,:,:] = insect_tools.get_M_b2s(eta, side).T
-
-            self.M_s2w[it,:,:] = insect_tools.get_M_s2w(alpha, theta, phi, side)
-            self.M_w2s[it,:,:] = insect_tools.get_M_s2w(alpha, theta, phi, side).T
+        # WING angular velocities in various frames        
+        rot_wing_s = np.zeros_like( self.rot_wing_w )
+        if wing == 'left':
+            rot_wing_s[ii,0] = self.phi_dt[ii]-np.sin(self.theta[ii])*self.alpha_dt[ii]
+            rot_wing_s[ii,1] = np.cos(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]-np.sin(self.phi[ii])*self.theta_dt[ii]
+            rot_wing_s[ii,2] = np.sin(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]+np.cos(self.phi[ii])*self.theta_dt[ii]
+        elif wing == 'right':
+            rot_wing_s[ii,0] = -self.phi_dt[ii]-np.sin(self.theta[ii])*(-self.alpha_dt[ii])
+            rot_wing_s[ii,1] = np.cos(-self.phi[ii])*np.cos(self.theta[ii])*(-self.alpha_dt[ii])-np.sin(-self.phi[ii])*self.theta_dt[ii]
+            rot_wing_s[ii,2] = np.sin(-self.phi[ii])*np.cos(self.theta[ii])*(-self.alpha_dt[ii])+np.cos(-self.phi[ii])*self.theta_dt[ii]
+        
+        self.rot_wing_w[ii,:] = apply_rotations_to_vectors( self.M_s2w[ii,:,:], rot_wing_s[ii,:])
+        self.rot_wing_b[ii,:] = apply_rotations_to_vectors( self.M_s2b[ii,:,:], rot_wing_s[ii,:])
+        self.rot_wing_g[ii,:] = apply_rotations_to_vectors( self.M_b2g[ii,:,:], self.rot_wing_b[ii,:])
             
-            self.M_b2w[it,:,:] = insect_tools.get_M_b2w(alpha, theta, phi, eta, side)
-            self.M_w2b[it,:,:] = insect_tools.get_M_b2w(alpha, theta, phi, eta, side).T
-            
-            self.M_g2b[it,:,:] = insect_tools.get_M_g2b(psi, beta, gamma)
-            self.M_b2g[it,:,:] = insect_tools.get_M_g2b(psi, beta, gamma).T
-            
-            self.M_g2w[it,:,:] = self.M_b2w[it,:,:] @ self.M_g2b[it,:,:]
-            self.M_w2g[it,:,:] = self.M_g2w[it,:,:].T
+        # The planar angular velocity {𝛀(φ,Θ)} comes from the decomposition of the motion
+        # into 'translational' and rotational components, with the rotational component beig defined as
+        # 'new' definition (not setting alpha_dt = 0)
+        self.planar_rot_wing_w[ii,:] = self.rot_wing_w[ii,:].copy()
+        self.planar_rot_wing_w[ii,1] = 0.0 # set y-component to zero        
+        self.planar_rot_wing_g[ii,:] = apply_rotations_to_vectors( self.M_w2g[ii,:,:], self.planar_rot_wing_w[ii,:])
+        
+        # if it is not passed, we try to extract the insects cruising speed from the PARAMS file
+        if u_infty_g is None:
+            u_infty_g = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
+        # insects cruising speed
+        self.u_infty_g[ii, :] = np.matlib.repmat( u_infty_g, nt, 1)
+        # flight velocity in the wing system 
+        self.u_infty_w[ii, :] = apply_rotations_to_vectors(self.M_g2w[ii,:,:], self.u_infty_g[ii,:])
+       
+        # these are all unit vectors of the wing
+        # ey_wing_g coincides with the tip only if R is normalized (usually the case)
+        self.ex_wing_g[ii, :] = apply_rotations_to_vectors(self.M_w2g[ii,:,:], np.matlib.repmat( np.asarray([1,0,0]), nt, 1))
+        self.ey_wing_g[ii, :] = apply_rotations_to_vectors(self.M_w2g[ii,:,:], np.matlib.repmat( np.asarray([0,1,0]), nt, 1))
+        self.ez_wing_g[ii, :] = apply_rotations_to_vectors(self.M_w2g[ii,:,:], np.matlib.repmat( np.asarray([0,0,1]), nt, 1))
 
-            # flight velocity in the wing system
-            self.u_infty_w[it, :] = self.M_g2w[it,:,:] @ self.u_infty_g[it,:]
-
-            # these are all unit vectors of the wing
-            # ey_wing_g coincides with the tip only if R is normalized (usually the case)
-            self.ex_wing_g[it, :] = self.M_w2g[it,:,:] @ np.asarray([1,0,0])
-            self.ey_wing_g[it, :] = self.M_w2g[it,:,:] @ np.asarray([0,1,0])
-            self.ez_wing_g[it, :] = self.M_w2g[it,:,:] @ np.asarray([0,0,1])
-
-            # angular velocity of the wing
-            self.rot_wing_g[it, :], self.rot_wing_b[it, :], self.rot_wing_w[it, :], self.planar_rot_wing_g[it, :], self.planar_rot_wing_w[it, :] = generate_rot_wing(
-                self.M_s2w[it,:,:], self.M_b2g[it,:,:], self.M_s2b[it,:,:],
-                phi, phi_dt, alpha, alpha_dt, theta, theta_dt, self.wing)
-
-            self.planar_rot_wing_mag[it] = norm( self.planar_rot_wing_w[it, :] )
-
-            # wing tip velocity
-            self.u_tip_g[it, :] = np.cross(self.rot_wing_g[it, :], self.ey_wing_g[it, :]) + self.u_infty_g[it, :]
-            self.u_tip_w[it, :] = self.M_g2w[it,:,:] @ self.u_tip_g[it, :]
-
-            self.u_tip_mag[it] = norm(self.u_tip_g[it, :])
-            # drag unit vector
-            self.e_drag_g[it,:] = -normalize_vector(self.u_tip_g[it, :])
-
-            # lift unit vector. sign is determined below.
-            self.e_lift_g[it,:] = normalize_vector( np.cross(-self.e_drag_g[it, :], self.ey_wing_g[it, :]) )
-            # use this one for getAoA with arccos
-            self.AoA[it] = getAoA(self.ex_wing_g[it, :], -self.e_drag_g[it, :]) 
-            # alternative definition, we do not use it. It is a bit strange to have the ABS value?
-            self.AoA_whitney[it] = np.abs(np.arctan2( +self.rot_wing_w[it, 0], -self.rot_wing_w[it, 2] ))
-
+        # wing tip velocity
+        self.u_tip_g[ii, :] = np.cross(self.rot_wing_g[ii, :], self.ey_wing_g[ii, :]) + self.u_infty_g[ii, :]
+        self.u_tip_w[ii]    = apply_rotations_to_vectors(self.M_g2w[ii,:,:], self.u_tip_g[ii,:])
+        # and its magnitude
+        self.u_tip_mag[ii]  = np.linalg.norm(self.u_tip_g[ii, :], axis=1)
+        
+        # drag unit vector
+        for a in range(3):
+            self.e_drag_g[ii,a] = -self.u_tip_g[ii,a] / self.u_tip_mag[ii]
+                
+        # lift unit vector
+        self.e_lift_g[ii,:] = np.cross(-self.e_drag_g[ii, :], self.ey_wing_g[ii, :])
+        n = np.linalg.norm(self.e_lift_g[ii,:], axis=1)
+        for a in range(3):
+            self.e_lift_g[ii,a] /= n
+        
+        # angular velocity norm (without feathering)
+        self.planar_rot_wing_mag[ii] = np.linalg.norm( self.planar_rot_wing_w[ii, :], axis=1 )
+        
+        # angle of attack
+        v = self.ex_wing_g[ii,0]*(-self.e_drag_g[ii,0]) + self.ex_wing_g[ii,1]*(-self.e_drag_g[ii,1]) + self.ex_wing_g[ii,2]*(-self.e_drag_g[ii,2])
+        self.AoA[ii] = np.arccos(v)
+        
         # calculation of wingtip acceleration and angular acceleration in wing reference frame
         # a second loop over time is required, because we first need to compute ang. vel. then diff it here.
         self.a_tip_g[ii]        = diff1( self.u_tip_g[ii], dt )
@@ -609,7 +609,8 @@ class QSM:
         # peaks at t=0.0 and t=1.0. The distance between peaks is 3/4 * 1/2, so we think that the two half-strokes
         # occupy at most 3/8 and 5/8 of the complete cycle (maximum imbalance between up- and downstroke). This
         # filters out smaller peaks (in height) automatically, so we are left with the two most likely candidates.
-        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.u_tip_mag[ii]] ), distance=3*self.nt/4/2)
+#ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.u_tip_mag[ii]] ), distance=3*self.nt/4/2)
+        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.planar_rot_wing_mag[ii]] ), distance=3*self.nt/4/2)
         ipeaks -= self.nt # shift (skip 1st periodic image)
         
         # keep only peaks in the original signal domain (remove periodic "ghosts")
@@ -620,7 +621,8 @@ class QSM:
         # We must then look for a different way to determine reversals or set it manually.
         if len(ipeaks) != 2 :
             plt.figure()
-            plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.u_tip_mag[ii]]) ) )
+    #plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.u_tip_mag[ii]]) ) )
+            plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.planar_rot_wing_mag[ii]]) ) )
             plt.xlabel('timeline (repeated identical cycle 3 times)')
             plt.ylabel('u_tip_mag (wing=%s)' % (self.wing))
             plt.plot( self.timeline[ipeaks]+0, -1*self.u_tip_mag[ipeaks], 'ro')
@@ -634,6 +636,9 @@ class QSM:
 
         sign_liftvector[ ipeaks[0]:ipeaks[1], : ] *= -1
         self.e_lift_g[ii] *= sign_liftvector
+        # ipeaks = [0, int(nt/2)]
+        # sign_liftvector[ ipeaks[0]:ipeaks[1], : ] *= -1
+        # self.e_lift_g[ii] *= sign_liftvector
 
         # Convention: the mean lift vector in the body system should point upwards. The problem is that the code
         # sometimes identifies the first- and sometimes the second part of the stroke as downstroke.
@@ -641,7 +646,7 @@ class QSM:
         # simply be inverted. However, when using the trained model for prediction of a different kinematics
         # set, then it may identify the other half as downstroke - the resulting prediction is completely wrong,
         # because the sign of e_lift_g needs to be inverted.
-        # Assuming the lift vectors ez_body component is positie is a convention - still, the training can invert
+        # Assuming the lift vectors ez_body component is positive is a convention - still, the training can invert
         # the sign of the coefficients should that be necessary in weird maneuvres when the insect is flying on its
         # back.
         self.e_lift_b[ii,:] = apply_rotations_to_vectors(self.M_g2b[ii,:,:], self.e_lift_g[ii,:])
@@ -747,7 +752,7 @@ class QSM:
             print("C_rot=%f C_rd=%f" % (x0[4], x0[7]))
 
 
-    def read_CFD_data(self, run_directory, params_file, T0, i0=0 ):
+    def read_CFD_data(self, run_directory, params_file, T0, i0=0, verbose=True ):
         """
         Read in CFD data (forces, moments, power) for a single run. Starting point in
         time is T0, we read data evenly sampled in time until T0+1.0.
@@ -761,8 +766,9 @@ class QSM:
         # as a means of informing the user that they need to read CFD data before fitting (training)
         self.readAtLeastOneCFDrun = True
 
-        print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        print('The parsed data correspond to the %s wing.' % (self.wing))
+        if verbose:
+            print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+            print('The parsed data correspond to the %s wing.' % (self.wing))
 
         # to create the filenames to read
         wing_pair = ""
@@ -774,14 +780,16 @@ class QSM:
         # use np.loadtxt just this one time to figure out the bounds because it is faster
         d = np.loadtxt(run_directory+'/forces_'+suffix+'.t')
         time_start, time_end = d[0,0], d[-1,0]
-        print("CFD data       t=[%f, %f]" % (time_start, time_end))
-        print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
+        
+        if verbose:
+            print("CFD data       t=[%f, %f]" % (time_start, time_end))
+            print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
 
         # read in data from desired cycle (hence the shift by T0)
         # NOTE that load_t_file can remove outliers in the data, which turned out very useful for the
         # musca domestica data (which have large jumps exactly at the reversals)
-        forces_CFD  = insect_tools.load_t_file(run_directory+'/forces_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
-        moments_CFD = insect_tools.load_t_file(run_directory+'/moments_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True)
+        forces_CFD  = insect_tools.load_t_file(run_directory+'/forces_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True, verbose=verbose)
+        moments_CFD = insect_tools.load_t_file(run_directory+'/moments_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True, verbose=verbose)
 
         # copy to array
         self.F_CFD_g[ii,0:2+1] = forces_CFD[:, 1:3+1]
@@ -805,7 +813,7 @@ class QSM:
 
         self.fit_to_CFD(plot=plot, optimize=False, N_trials=1, model_terms=model_terms)
 
-    def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, model_terms=[True, True, True, True, True], verbose=True):
+    def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, model_terms=[True, True, True, True, True], verbose=True, ellington_type='utip'):
         """
         Train the QSM model with one/many CFD run. This works only if you have initialized
             * the kinematics with parse_kinematics_file
@@ -856,6 +864,11 @@ class QSM:
                 # this is what nakata proposed:
                 Cl   = x0[0]*(AoA**3 - AoA**2 * np.pi/2) + x0[1]*(AoA**2 - AoA * np.pi/2)
                 Cd   = x0[2]*np.cos( AoA )**2  + x0[3]*np.sin( AoA )**2
+            elif self.model_CL_CD == 'Polhamus':
+                # see J-S Han et al Bioinspr Biomim 12 2017 036004
+                Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
+                Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
+            
             else:
                 raise ValueError("The CL/CD model must be either Dickinson or Nakata")
 
@@ -896,18 +909,24 @@ class QSM:
             # and thus delivers nonzero values even for still wings. Cai integrated over the blades, and each blade
             # had the correct velocity. This can be done analytically, as we do here, see my lecture notes.
             if model_terms[0] is True:
-                # self.Ftc_mag = 0.5*rho*Cl*(self.planar_rot_wing_mag**2)*Ild
-                # self.Ftd_mag = 0.5*rho*Cd*(self.planar_rot_wing_mag**2)*Ild
+                if ellington_type == 'utip':
+                    self.Ftc_mag = 0.5*rho*Cl*(self.u_tip_mag**2)*self.S2
+                    self.Ftd_mag = 0.5*rho*Cd*(self.u_tip_mag**2)*self.S2
+                    
+                elif ellington_type == 'rot':
+                    self.Ftc_mag = 0.5*rho*Cl*(self.planar_rot_wing_mag**2)*self.S2
+                    self.Ftd_mag = 0.5*rho*Cd*(self.planar_rot_wing_mag**2)*self.S2
+                    
+                elif ellington_type == 'ABC':
+                    # Using the bumblebee simulations at various u_infty values, the best choice for ellington_type is 'utip'.
+                    # Despite the fact that a similar result (ABC) is presented in Han et al 2017 (An aerodynamic model for isect flapping wings in forward flight)
+                    A = self.planar_rot_wing_mag**2
+                    B = 2.0*(self.u_infty_w[:,2]*self.rot_wing_w[:,0]-self.u_infty_w[:,0]*self.rot_wing_w[:,2])
+                    C = self.u_infty_w[:,0]**2+self.u_infty_w[:,1]**2+self.u_infty_w[:,2]**2
 
-                self.Ftc_mag = 0.5*rho*Cl*(self.u_tip_mag**2)*self.S2
-                self.Ftd_mag = 0.5*rho*Cd*(self.u_tip_mag**2)*self.S2
-
-                # A = self.planar_rot_wing_mag**2
-                # B = 2.0*(self.u_infty_w[:,2]*self.rot_wing_w[:,0]-self.u_infty_w[:,0]*self.rot_wing_w[:,2])
-                # C = self.u_infty_w[:,0]**2+self.u_infty_w[:,1]**2+self.u_infty_w[:,2]**2
-
-                # self.Ftc_mag = 0.5*rho*Cl*( self.S2*A + self.S1*B + self.S0*C )
-                # self.Ftd_mag = 0.5*rho*Cd*( self.S2*A + self.S1*B + self.S0*C )
+    
+                    self.Ftc_mag = 0.5*rho*Cl*( self.S2*A + self.S1*B + self.S0*C )
+                    self.Ftd_mag = 0.5*rho*Cd*( self.S2*A + self.S1*B + self.S0*C )
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # rotational forces
@@ -916,8 +935,11 @@ class QSM:
             # and use the angular velocity instead of alpha, alpha_dt.
             # Sane's original rotational force, "discovered" in Dickinson1999 and later modeled by Sane2002
             if model_terms[1] is True:
+                # if ellington_type == 'rot':
+                #     self.Frc_mag[:] = rho*Crot*self.planar_rot_wing_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
+                # else:
                 self.Frc_mag = rho*Crot*self.u_tip_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
-                # self.Frc_mag[:] = rho*Crot*self.planar_rot_wing_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
+
 
             # Rotational drag: \cite{Cai2021}. The fact that the wing rotates around its rotation axis, which is the $y$ component of the angular velocity
             # (Which Cai identifies as $\dot{\alpha}$, even though this is only an approximation) induces a net non-zero velocity component normal
@@ -928,7 +950,7 @@ class QSM:
             # It is however correct that Cai says: as the Ellington terms do only include the velocity of the blade point on the
             # rotation axis (the point $(0,r,0)^T$), the rotation around that very axis ($y$) is not included in the traditional term.
             if model_terms[2] is True:
-                self.Frd_mag = -1/6*rho*Crd*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1]#Cai et al. 2021, Eqn 2.13
+                self.Frd_mag = -1/6*rho*Crd*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1] # Cai et al. 2021, Eqn 2.13
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # added mass forces
@@ -990,6 +1012,16 @@ class QSM:
             # normalization
             if K_forces_den >= 1e-16:
                 K_forces /= K_forces_den
+        
+            # if self.nruns>1:
+            #     ii0 = 0
+            #     v = []
+            #     for kk in range(self.nruns):
+            #         ii = np.arange(start=ii0, stop=ii0+nt-1+1 )
+            #         v.append( norm(self.F_QSM_g[ii,0]-self.F_CFD_g[ii,0]) + norm(self.F_QSM_g[ii,2]-self.F_CFD_g[ii,2]) / (norm(self.F_CFD_g[ii,0]) + norm(self.F_CFD_g[ii,2]))  )
+            #         ii0 += self.nt
+                    
+            #     K_forces = np.mean(np.asarray(v))
 
             # QSM forces in wing system:
             self.F_QSM_w = apply_rotations_to_vectors(self.M_g2w, self.F_QSM_g)
@@ -1241,7 +1273,7 @@ class QSM:
             print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 
 
-    def setup_wing_shape(self, wingShape_file, nb=1000):
+    def setup_wing_shape(self, wingShape_file, nb=1000, verbose=True):
         """
         Specifiy the wing shape (here, in the form of the wing contour).
         Note the code can run without this information, as the influence of
@@ -1250,8 +1282,8 @@ class QSM:
 
         Shape data is read from an INI file.
         """
-
-        print('Parsing wing contour: '+wingShape_file)
+        if verbose:
+            print('Parsing wing contour: '+wingShape_file)
 
         if os.path.isfile(wingShape_file):
             xc, yc, area = insect_tools.wing_contour_from_file( wingShape_file )
@@ -1266,6 +1298,16 @@ class QSM:
         self.x_wingContour_w  = np.transpose(self.x_wingContour_w)
 
         self.bodyPointsSequence   = np.zeros((self.nt, self.x_wingContour_w.shape[0], 3))
+
+        if wingShape_file == 'none':
+            self.Iam = 1.0
+            self.Iwe = 1.0
+            self.Ild = 1.0
+            self.Irot = 1.0
+            self.S2 = 1.0
+            self.S1 = 1.0
+            self.S0 = 1.0
+            return
 
         # this function calculates the chord length by splitting into 2 segments (LE and TE segment)
         # and then interpolating along the yw-axis
@@ -1316,15 +1358,15 @@ class QSM:
 
         from scipy.integrate import simpson
 
-        self.Iam  = simpson(C2(r), r)
-        self.Iwe  = simpson(C3r3(r), r)
-        self.Ild  = simpson(Cr2(r), r) #second moment of area for lift/drag calculations
-        self.Irot = simpson(C2r(r), r) #second moment of area for rotational force calculation
-        self.IA = simpson(C(r), r)
+        self.Iam  = simpson(C2(r), x=r)
+        self.Iwe  = simpson(C3r3(r), x=r)
+        self.Ild  = simpson(Cr2(r), x=r) #second moment of area for lift/drag calculations
+        self.Irot = simpson(C2r(r), x=r) #second moment of area for rotational force calculation
+        self.IA = simpson(C(r), x=r)
 
         # area moments:
         self.S2 = self.Ild
-        self.S1 = simpson(Cr(r), r)
+        self.S1 = simpson(Cr(r), x=r)
         self.S0 = area
 
         self.hinge_index   = np.argmin( self.x_wingContour_w[:, 1] )
