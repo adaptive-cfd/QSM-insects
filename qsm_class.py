@@ -71,6 +71,24 @@ def apply_rotations_to_vectors(M, x):
 
 
 class QSM:
+    """
+    QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
+    
+    Initialization Parameters
+    ------------
+    nt :
+        The kinematics, forces, etc. are evaluated on an equidistant time vector with nt time steps.
+    nruns :
+        The number of CFD simulations that you want to base the model on. The default case is 1 (a single CFD simulation is used
+        to determine the QSM coefficients), but you can also fit the model to a number >1 of runs simultaneously. The QSM coefficient
+        optimizer will fit as best possible all data.
+    timeline :
+        It is sometimes useful to provide a timeline (time vector) yourself. The default is [0,1) with nt samples and without then endpoint t=1
+    model_CL_CD :
+        The Ellington terms (lift and drag) require evaluation of CL and CD as a function of AoA, for this a function is needed. Implemented models
+        are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
+        similar using the three models. 
+    """
     def __init__(self, nt=300, nruns=1, timeline=None, model_CL_CD='Dickinson'):
         self.nt = nt
         self.model_CL_CD = model_CL_CD
@@ -186,19 +204,24 @@ class QSM:
         self.D2 = finite_differences.D22(self.nt, self.dt)
 
 
-    def parse_many_run_directorys(self, run_directories, params_file, kinematics_file, T0=1.0, wing='right', plot=False):
+    def parse_many_run_directorys(self, run_directories, params_file, kinematics_file='kinematics.t', T0=1.0, wing='right', plot=False):
         """
         This function is for reading in a bunch of CFD runs in order to fit a single
         QSM model to many runs. It parses the kinematics data (either kinematics.t or an *.ini
         file), and reads in the CFD data for the forces, moments, power.
         
-        params_file: just the file (not the complete path, i.e., we look in the folders run_directories each time for this file)
+        Parameters
+        -----------
+        
+        run_directories :
+            Python list of the simulation folders (complete path)
+        params_file : 
+            just the filename (not the complete path, i.e., we look in the folders run_directories each time for this file)
+        kinematics_file :
+            the filename where to take the kinematics from. usually, this will be kinematics.t, but it can also be the wing kinematics INI file.
+        
 
-        TODO:
-        Same INI file all runs?
-        Same cycle all runs?
-        Same wing ?
-
+        Note: this function replaces using read_CFD_data() and parse_kinematics() in case you have several CFD runs.
         """
 
         # check if right amount of memory is allocated
@@ -209,7 +232,7 @@ class QSM:
         for run in run_directories:
             run += '/'
             self.parse_kinematics( params_file=run+params_file, kinematics_file=run+kinematics_file, wing=wing, i0=i0, plot=plot  )
-            self.read_CFD_data(run, run+params_file, T0, i0)
+            self.read_CFD_data(run, T0, i0)
 
             i0 += self.nt
 
@@ -229,11 +252,11 @@ class QSM:
 
         # get point set by timeStep number
         x_wingContour_w = self.x_wingContour_w
-        x_wingContour_w[:,2] = sign*0.001
+        x_wingContour_w[:,2] = sign*0.02
         points_top = np.transpose( np.matmul(self.M_g2w[it,:,:].T, x_wingContour_w.T) )
 
         x_wingContour_w = self.x_wingContour_w
-        x_wingContour_w[:,2] = -0.001*sign
+        x_wingContour_w[:,2] = -0.02*sign
         points_bot = np.transpose( np.matmul(self.M_g2w[it,:,:].T, x_wingContour_w.T) )
 
         X = points_top[:, 0]
@@ -256,8 +279,8 @@ class QSM:
         ax.plot(self.ey_wing_g[:it, 0], 0*self.ey_wing_g[:it, 1]+a, self.ey_wing_g[:it, 2], color='k', linestyle='dashed', linewidth=0.5)
 
         # draw the wing
-        ax.add_collection3d(Poly3DCollection(verts=[points_top], color='r', edgecolor='k'))
-        ax.add_collection3d(Poly3DCollection(verts=[points_bot], color='lightsalmon', edgecolor='k'))
+        ax.add_collection3d(Poly3DCollection(verts=[points_top], color='r', edgecolor='k', alpha=0.95))
+        ax.add_collection3d(Poly3DCollection(verts=[points_bot], color='lightsalmon', edgecolor='k', alpha=0.95))
 
         #shadows
         #x-y plane shadow
@@ -272,32 +295,54 @@ class QSM:
         XZ_plane_shadow = np.vstack(((X, a*np.ones_like(Y), Z))).transpose()
         ax.add_collection3d(Poly3DCollection(verts=[XZ_plane_shadow], color='#d3d3d3'))
 
+
+        # a few unit vectors:
+        # the wing reference frame
+        ax.quiver( X=[0.0, 0.0, 0.0], Y=[0.0, 0.0, 0.0], Z=[0.0, 0.0, 0.0], 
+                  U=[self.ex_wing_g[it,0],self.ey_wing_g[it,0],self.ez_wing_g[it,0]], 
+                  V=[self.ex_wing_g[it,1],self.ey_wing_g[it,1],self.ez_wing_g[it,1]], 
+                  W=[self.ex_wing_g[it,2],self.ey_wing_g[it,2],self.ez_wing_g[it,2]],
+                  arrow_length_ratio=0.15, label='wing reference frame', color='c')
+        # lift /drag
+        ax.quiver( X=[0.0, 0.0], Y=[0.0, 0.0], Z=[0.0, 0.0], 
+                  U=[self.e_lift_g[it,0],self.e_drag_g[it,0]], 
+                  V=[self.e_lift_g[it,1],self.e_drag_g[it,1]], 
+                  W=[self.e_lift_g[it,2],self.e_drag_g[it,2]],
+                  arrow_length_ratio=0.15, label='lift \& drag unit vectors', color='m')
+        
+
         #set the axis limits
         ax.set_xlim([-a, a])
         ax.set_ylim([-a, a])
         ax.set_zlim([-a, a])
 
         #set the axis labels
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
+        ax.set_xlabel('$x/R$')
+        ax.set_ylabel('$y/R$')
+        ax.set_zlabel('$z/R$')
+        
+        ax.legend()
 
-
-    def kinematics_3D_animation(self, fnames_out="visualization3D"):
+    def kinematics_3D_animation(self, fnames_out="visualization3D", directory='./', dark_plot=False, dpi=200):
         """
         Creates one PNG file per time step, loops over the entire time vector
         """
+        
+        if dark_plot:
+            plt.style.use('dark_background')
 
         # can be called only after parse_kinematics
         plt.figure()
         ax = plt.figure().add_subplot(projection='3d')
 
         for it in range(self.nt):
+            ax.cla()
             self.kinematics_3D_frame(it, ax)
             plt.show()
-            fname_out = fnames_out+'.%04i.png' % (it)
+            fname_out = directory + '/' + fnames_out+'.%04i.png' % (it)
             print('Animation 3D visualization saving: ' + fname_out)
-            plt.savefig( fname_out )
+            
+            plt.savefig( fname_out, dpi=dpi )
 
     def parse_kinematics(self, params_file, kinematics_file=None, u_infty_g=None, plot=True, wing='auto', yawpitchroll0=None, eta_stroke=None, i0=0,
                          alpha=None, phi=None, theta=None, psi=None, beta=None, gamma=None, verbose=True):
@@ -306,6 +351,7 @@ class QSM:
         in the QSM class arrays. You must run this before you can fit the QSM to the CFD data.
 
         There are 3 ways to read kinematics:
+        -------------------------------------
             _1_ Reading kinematics.t from an existing CFD simulation (i.e. a run that has been simulated)
 
             _2_ Reading an INI file for wingbeat kinematics (the input for CFD runs, but not necessarily a run that has been simulated)
@@ -526,6 +572,7 @@ class QSM:
             rot_wing_s[ii,0] = self.phi_dt[ii]-np.sin(self.theta[ii])*self.alpha_dt[ii]
             rot_wing_s[ii,1] = np.cos(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]-np.sin(self.phi[ii])*self.theta_dt[ii]
             rot_wing_s[ii,2] = np.sin(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]+np.cos(self.phi[ii])*self.theta_dt[ii]
+
         elif wing == 'right':
             rot_wing_s[ii,0] = -self.phi_dt[ii]-np.sin(self.theta[ii])*(-self.alpha_dt[ii])
             rot_wing_s[ii,1] = np.cos(-self.phi[ii])*np.cos(self.theta[ii])*(-self.alpha_dt[ii])-np.sin(-self.phi[ii])*self.theta_dt[ii]
@@ -752,12 +799,19 @@ class QSM:
             print("C_rot=%f C_rd=%f" % (x0[4], x0[7]))
 
 
-    def read_CFD_data(self, run_directory, params_file, T0, i0=0, verbose=True ):
+    def read_CFD_data(self, run_directory, T0, i0=0, verbose=True ):
         """
         Read in CFD data (forces, moments, power) for a single run. Starting point in
-        time is T0, we read data evenly sampled in time until T0+1.0.
+        time is T0, we read data evenly sampled in time until T0+1.0 (interpolation is applied to CFD data).
         If multiple runs are used for fitting, the data are concatenated, in which case the i0 parameter is used.
-        The data are then stored as [i0:i0+nt] (python notation, so actually [i0:i0+nt-1])
+        The data are then stored as [i0:i0+nt] (python notation, so actually [i0:i0+nt-1]).
+        
+        The CFD data are read from *.t files in the simulation directory (run_directory). 
+        
+        If you want to use the QSM model on several CFD runs, it is easier to use parse_many_run_directorys,
+        although that assumes the same T0 for all runs.
+        
+        
         """
         nt = self.nt
         # index range to store the data to
@@ -815,9 +869,12 @@ class QSM:
 
     def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, model_terms=[True, True, True, True, True], verbose=True, ellington_type='utip'):
         """
-        Train the QSM model with one/many CFD run. This works only if you have initialized
-            * the kinematics with parse_kinematics_file
-            * read the CFD data with read_CFD_data
+        Train the QSM model with one/many CFD run(s). 
+        ------------------
+        
+        This works only if you have initialized
+            * the kinematics with parse_kinematics_file (or parse_many_run_directories)
+            * read the CFD data with read_CFD_data (or parse_many_run_directories)
             * the wing shape with setup_wing_shape
         before calling this routine.
 
@@ -882,7 +939,7 @@ class QSM:
             Cam6 = x0[11]
             Cam7, Cam8, Cam9 = x0[12], x0[13], x0[14]
 
-            return Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9
+            return Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 # currently CAM9 is unused!
 
         #%% force optimization
 
@@ -1012,16 +1069,6 @@ class QSM:
             # normalization
             if K_forces_den >= 1e-16:
                 K_forces /= K_forces_den
-        
-            # if self.nruns>1:
-            #     ii0 = 0
-            #     v = []
-            #     for kk in range(self.nruns):
-            #         ii = np.arange(start=ii0, stop=ii0+nt-1+1 )
-            #         v.append( norm(self.F_QSM_g[ii,0]-self.F_CFD_g[ii,0]) + norm(self.F_QSM_g[ii,2]-self.F_CFD_g[ii,2]) / (norm(self.F_CFD_g[ii,0]) + norm(self.F_CFD_g[ii,2]))  )
-            #         ii0 += self.nt
-                    
-            #     K_forces = np.mean(np.asarray(v))
 
             # QSM forces in wing system:
             self.F_QSM_w = apply_rotations_to_vectors(self.M_g2w, self.F_QSM_g)
@@ -1100,7 +1147,7 @@ class QSM:
         if optimize:
             # as a means of informing the user that they need to read CFD data before fitting (training):
             if not self.readAtLeastOneCFDrun:
-                raise ValueError("New (11/2024): You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
+                raise ValueError("You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
 
             start = time.time()
             bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-60, 60)]
