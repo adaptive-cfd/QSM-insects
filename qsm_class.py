@@ -17,7 +17,9 @@ import matplotlib.pyplot as plt
 import finite_differences
 
 # use latex
-plt.rcParams["text.usetex"] = True
+# plt.rcParams["text.usetex"] = True
+
+latex = plt.rcParams["text.usetex"]
 
 deg2rad = np.pi/180.0
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,9 +182,13 @@ class QSM:
         # wing-geometry-dependent constants
         # they are computed (if desired) in setup_wing_shape
         self.Iam  = 1.0
-        self.Iwe  = 1.0
-        self.Ild  = 1.0
-        self.Irot = 1.0
+        
+        self.S_rot = np.zeros((nt*nruns))
+        self.S_test = np.zeros((nt*nruns))
+        self.S_RD = np.zeros((nt*nruns))
+        self.S2 = np.zeros((nt*nruns))
+        self.S1 = np.zeros((nt*nruns))
+        self.S0 = np.zeros((nt*nruns))
 
         self.wing = 'left'
         self.x_wingContour_w = np.zeros((10,3))
@@ -204,7 +210,8 @@ class QSM:
         self.D2 = finite_differences.D22(self.nt, self.dt)
 
 
-    def parse_many_run_directorys(self, run_directories, params_file, kinematics_file='kinematics.t', T0=1.0, wing='right', plot=False):
+    def parse_many_run_directorys(self, run_directories, params_file, kinematics_file='kinematics.t', 
+                                  T0=1.0, wing='right', plot=False):
         """
         This function is for reading in a bunch of CFD runs in order to fit a single
         QSM model to many runs. It parses the kinematics data (either kinematics.t or an *.ini
@@ -223,7 +230,10 @@ class QSM:
 
         Note: this function replaces using read_CFD_data() and parse_kinematics() in case you have several CFD runs.
         """
-
+        import glob
+        import inifile_tools
+        import os
+        
         # check if right amount of memory is allocated
         if not self.psi.shape[0] == self.nt*len(run_directories):
             raise ValueError("We try to process %i runs, but allocated not enough storage. Use QSM = qsm_class.QSM(nt=XXX, nruns=YYY)")
@@ -231,6 +241,18 @@ class QSM:
         i0 = 0
         for run in run_directories:
             run += '/'
+            
+            file_WingShape = inifile_tools.get_ini_parameter( inifile_tools.find_WABBIT_main_inifile(run), 'Insects', 'WingShape', str, 'none')[0]
+            file_WingShape = file_WingShape.replace('from_file::','')
+            
+            if not os.path.isfile(run+file_WingShape):
+                raise ValueError("""We try to initialize the wing shape for run %i (%s), and identified %s as the WinShape file.
+                                 We do however not find this file, and cannot initialize the wing geometry parameters for this run.
+                                 Please check if the PARAMS file (%s) refers to an existing WING *.ini file. Note: it may be
+                                 that the QSM code incorrectly identifies the ShapeFile, if two distinct ones are used for left/right wing.""")
+            
+            self.setup_wing_shape( run+file_WingShape, i0=i0)
+            
             self.parse_kinematics( params_file=run+params_file, kinematics_file=run+kinematics_file, wing=wing, i0=i0, plot=plot  )
             self.read_CFD_data(run, T0, i0)
 
@@ -352,9 +374,11 @@ class QSM:
 
         There are 3 ways to read kinematics:
         -------------------------------------
-            _1_ Reading kinematics.t from an existing CFD simulation (i.e. a run that has been simulated)
+            _1_ Reading kinematics.t from an existing CFD simulation (i.e. a run that has been simulated): kinematics_file=kinematics.t
 
-            _2_ Reading an INI file for wingbeat kinematics (the input for CFD runs, but not necessarily a run that has been simulated)
+            _2_ Reading an INI file for wingbeat kinematics (the input for CFD runs, but not necessarily a run that has been simulated): kinematics_file=XXX.ini
+                In this mode, the body angles are determined from the main PARAMS.ini file if yawpitchroll0=None, idem for the stroke plane angle
+                if eta_stroke=None. You can also pass these values to this function, in which case we take those (and not the ones from the PARAMS.ini file)
 
             _3_ Passing externally generated kinematics: alpha, phi, theta, eta_stroke, psi, beta, gamma as vectors sampled on equidistant time vector.
             Use QSM.timeline as time vector. Do not pass `kinematics_file` in this case (=None). The angles you pass shall be in DEGREE.
@@ -461,7 +485,8 @@ class QSM:
                 # read kinematics.t (this is a pre-computed CFD run)
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 # load kinematics data by means of load_t_file function from insect_tools library
-                kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline, verbose=verbose)
+                kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline, verbose=verbose, optimized_loading=True)
+                
 
                 self.psi[ii]   = kinematics_cfd[:, 4].copy()
                 self.beta[ii]  = kinematics_cfd[:, 5].copy()
@@ -532,10 +557,10 @@ class QSM:
                     eta_stroke    = wt.get_ini_parameter(params_file, 'Insects', 'eta0', dtype=float )
 
                 # yaw pitch roll and stroke plane angle are all constant in time
-                self.psi[ii]   = np.zeros_like(self.phi) + yawpitchroll0[2]*(np.pi/180.0)
-                self.beta[ii]  = np.zeros_like(self.phi) + yawpitchroll0[1]*(np.pi/180.0)
-                self.gamma[ii] = np.zeros_like(self.phi) + yawpitchroll0[0]*(np.pi/180.0)
-                self.eta[ii]   = np.zeros_like(self.phi) + eta_stroke*(np.pi/180.0)
+                self.psi[ii]   = np.zeros_like(self.phi[ii]) + yawpitchroll0[2]*(np.pi/180.0)
+                self.beta[ii]  = np.zeros_like(self.phi[ii]) + yawpitchroll0[1]*(np.pi/180.0)
+                self.gamma[ii] = np.zeros_like(self.phi[ii]) + yawpitchroll0[0]*(np.pi/180.0)
+                self.eta[ii]   = np.zeros_like(self.phi[ii]) + eta_stroke*(np.pi/180.0)
 
             else:
                 raise ValueError("Parsing kinematics is possible with kinematics.t, kinematics.ini or manually passing the angles.")
@@ -738,6 +763,7 @@ class QSM:
 
             # u_wing_w (tip velocity in wing reference frame )
             ax = axes[1,0]
+            
             ax.plot(self.timeline, self.u_tip_w[ii, 0], label='$u_{\\mathrm{wing},x}^{(w)}$')
             ax.plot(self.timeline, self.u_tip_w[ii, 1], label='$u_{\\mathrm{wing},y}^{(w)}$')
             ax.plot(self.timeline, self.u_tip_w[ii, 2], label='$u_{\\mathrm{wing},z}^{(w)}$')
@@ -745,7 +771,10 @@ class QSM:
 
             ax.set_xlabel('$t/T$')
             ax.set_ylabel('[Rf]')
-            ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left(\\left|\\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.u_tip_mag)))
+            if latex:
+                ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left( \\left| \\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.u_tip_mag)))
+            else:
+                ax.set_title('Tip velocity magnitude in wing reference frame = %2.2f' % (np.mean(self.u_tip_mag)))
             ax.legend()
 
             #a_wing_w (tip acceleration in wing reference frame )
@@ -799,7 +828,7 @@ class QSM:
             print("C_rot=%f C_rd=%f" % (x0[4], x0[7]))
 
 
-    def read_CFD_data(self, run_directory, T0, i0=0, verbose=True ):
+    def read_CFD_data(self, run_directory, T0, i0=0, verbose=True, optimized_loading=True ):
         """
         Read in CFD data (forces, moments, power) for a single run. Starting point in
         time is T0, we read data evenly sampled in time until T0+1.0 (interpolation is applied to CFD data).
@@ -813,6 +842,10 @@ class QSM:
         
         
         """
+        
+        import datetime
+        import os        
+        
         nt = self.nt
         # index range to store the data to
         ii = np.arange(start=i0, stop=i0+nt-1+1 )
@@ -838,12 +871,54 @@ class QSM:
         if verbose:
             print("CFD data       t=[%f, %f]" % (time_start, time_end))
             print("QSM model uses t=[%f, %f]" % (T0, T0+1.0))
+            
+            
+        # optimized loading - convert to NPZ on first call, then read that
+        reloading_required, Q = False, None
+        if optimized_loading:
+            if not os.path.isfile( run_directory+'/QSM-CFD-data.npz' ):
+                # file does not exist - reloading is required.
+                reloading_required = True
+            else:
+                # file exists        
+                if datetime.datetime.fromtimestamp(os.path.getmtime(run_directory+'/QSM-CFD-data.npz' )) < datetime.datetime.fromtimestamp(os.path.getmtime(run_directory+'/forces_'+suffix+'.t')):
+                    # *.npz file is older than source *.t file - reloading is required
+                    reloading_required = True
+                    
+                # even if we won't use it, read the file now to determine at what time T0 it is (which cycle)
+                Q = np.load(run_directory+'/QSM-CFD-data.npz')
+                
+                # check if same T0 is used
+                if abs(Q['T0']-T0) > 1.0e-10:
+                    # a different T0 was used - reloading required
+                    reloading_required = True
 
-        # read in data from desired cycle (hence the shift by T0)
-        # NOTE that load_t_file can remove outliers in the data, which turned out very useful for the
-        # musca domestica data (which have large jumps exactly at the reversals)
-        forces_CFD  = insect_tools.load_t_file(run_directory+'/forces_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True, verbose=verbose)
-        moments_CFD = insect_tools.load_t_file(run_directory+'/moments_'+suffix+'.t', interp=True, time_out=self.timeline+T0, remove_outliers=True, verbose=verbose)
+
+        if not optimized_loading or reloading_required:
+            # read in data from desired cycle (hence the shift by T0)
+            # NOTE that load_t_file can remove outliers in the data, which turned out very useful for the
+            # musca domestica data (which have large jumps exactly at the reversals)
+            forces_CFD  = insect_tools.load_t_file(run_directory+'/forces_'+suffix+'.t', interp=True, 
+                                                   time_out=self.timeline+T0, remove_outliers=True, 
+                                                   verbose=verbose, optimized_loading=optimized_loading)
+            
+            moments_CFD = insect_tools.load_t_file(run_directory+'/moments_'+suffix+'.t', interp=True, 
+                                                   time_out=self.timeline+T0, remove_outliers=True, 
+                                                   verbose=verbose, optimized_loading=optimized_loading)
+            
+            if optimized_loading:
+                # when optimization is used, save converted data to binary npz file to read that next time.
+                np.savez(run_directory+'/QSM-CFD-data.npz', forces_CFD=forces_CFD, moments_CFD=moments_CFD, T0=T0)                
+        else:
+            # use optimized loading
+            if verbose:
+                print('Optimized reading from pre-converted *.npz file')       
+            
+            if Q is None:
+                Q = np.load(run_directory+'/QSM-CFD-data.npz')
+            
+            forces_CFD  = Q['forces_CFD']
+            moments_CFD = Q['moments_CFD']
 
         # copy to array
         self.F_CFD_g[ii,0:2+1] = forces_CFD[:, 1:3+1]
@@ -954,8 +1029,12 @@ class QSM:
             # The model can do without, as the optimizer simply adjusts the coefficients
             # accordingly.
             Iam = self.Iam
-            Ild = self.Ild
-            Irot = self.Irot
+            
+            if np.max(self.S2) < 1.0e-10:
+                raise ValueError("""We try to evaluate the QSM model, but the S2 (shape function) seems to be
+                                 all zeros. Probably you did not setup the wing shape before evaluating the model,
+                                 please do so using the function QSM.setup_wing_shape(). 
+                                 Alternatively, you can manually set QSM.S2 to a desired value (not reommended).""")
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # lift/drag forces
@@ -995,7 +1074,7 @@ class QSM:
                 # if ellington_type == 'rot':
                 #     self.Frc_mag[:] = rho*Crot*self.planar_rot_wing_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
                 # else:
-                self.Frc_mag = rho*Crot*self.u_tip_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
+                self.Frc_mag = rho*Crot*self.u_tip_mag*self.rot_wing_w[:,1]*self.S_rot # Nakata et al. 2015, Eqn. 2.6c
 
 
             # Rotational drag: \cite{Cai2021}. The fact that the wing rotates around its rotation axis, which is the $y$ component of the angular velocity
@@ -1007,7 +1086,8 @@ class QSM:
             # It is however correct that Cai says: as the Ellington terms do only include the velocity of the blade point on the
             # rotation axis (the point $(0,r,0)^T$), the rotation around that very axis ($y$) is not included in the traditional term.
             if model_terms[2] is True:
-                self.Frd_mag = -1/6*rho*Crd*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1] # Cai et al. 2021, Eqn 2.13
+                self.Frd_mag = (1/2)*rho*Crd*self.S_RD*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1] # Cai et al. 2021, Eqn 2.13
+                # self.Frd_mag = (1/2)*rho*Crd*self.S_RD*np.abs(self.alpha_dt)*self.alpha_dt # Cai et al. 2021, Eqn 2.13
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # added mass forces
@@ -1088,8 +1168,6 @@ class QSM:
                 axes[0, 0].set_ylabel('[-]')
                 axes[0, 0].legend(loc = 'upper right')
 
-
-
                 #vertical forces
                 axes[0, 1].plot(tt, self.Ftc[:, 2], label = 'Vert. part of F_{TC} (Ellington1984 lift force)', color='gold')
                 axes[0, 1].plot(tt, self.Ftd[:, 2], label = 'Vert. part of F_{TD} (Ellington1984 drag force)', color='lightgreen')
@@ -1151,6 +1229,7 @@ class QSM:
 
             start = time.time()
             bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-60, 60)]
+            bounds = 15*[(-1000, 1000)]
             K_forces = 9e9
 
             # optimize N_trials times from a different initial guess, use best solution found
@@ -1174,6 +1253,20 @@ class QSM:
             if verbose:
                 print('Completed in:', round(time.time() - start, 4), 'seconds')
                 print('x0_optimized:', np.round(self.x0_forces, 5), '\nK_optimized_forces:', K_forces)
+                
+        # for readability, remove unused coefficients
+        if not model_terms[0]:
+            self.x0_forces[0:3+1] = np.nan
+        if not model_terms[1]:
+            self.x0_forces[4] = np.nan
+        if not model_terms[2]:
+            self.x0_forces[7] = np.nan
+        if not model_terms[3]:
+            self.x0_forces[ [5,6,8,9,10,10] ] = np.nan
+        if not model_terms[4]:
+            self.x0_forces[ [12,13] ] = np.nan        
+        # unused:
+        self.x0_forces[14] = np.nan
 
         self.K_forces = cost_forces(self.x0_forces, self, show_plots=plot)
         if verbose:
@@ -1320,7 +1413,7 @@ class QSM:
             print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 
 
-    def setup_wing_shape(self, wingShape_file, nb=1000, verbose=True):
+    def setup_wing_shape(self, wingShape_file, nb=1000, verbose=True, i0=0, force_reload=False):
         """
         Specifiy the wing shape (here, in the form of the wing contour).
         Note the code can run without this information, as the influence of
@@ -1340,6 +1433,11 @@ class QSM:
             xc, yc, area = np.asarray([0.0, 0.5, 0.0, -0.5, 0.0]), np.asarray([0.0, 0.5, 1.0, 0.5, 0.0]), 1.0
 
         zc = np.zeros_like(xc)
+        
+        nt = self.nt
+        # index range to store the data to
+        ii = np.arange(start=i0, stop=i0+nt-1+1 )
+        
 
         self.x_wingContour_w  = np.vstack([xc, yc, zc])
         self.x_wingContour_w  = np.transpose(self.x_wingContour_w)
@@ -1348,12 +1446,10 @@ class QSM:
 
         if wingShape_file == 'none':
             self.Iam = 1.0
-            self.Iwe = 1.0
-            self.Ild = 1.0
-            self.Irot = 1.0
-            self.S2 = 1.0
-            self.S1 = 1.0
-            self.S0 = 1.0
+            self.S_rot[ii] = 1.0
+            self.S2[ii] = 1.0
+            self.S1[ii] = 1.0
+            self.S0[ii] = 1.0
             return
 
         # this function calculates the chord length by splitting into 2 segments (LE and TE segment)
@@ -1406,24 +1502,35 @@ class QSM:
         from scipy.integrate import simpson
 
         self.Iam  = simpson(C2(r), x=r)
-        self.Iwe  = simpson(C3r3(r), x=r)
-        self.Ild  = simpson(Cr2(r), x=r) #second moment of area for lift/drag calculations
-        self.Irot = simpson(C2r(r), x=r) #second moment of area for rotational force calculation
+        self.S_rot[ii] = simpson(C2r(r), x=r) #second moment of area for rotational force calculation
         self.IA = simpson(C(r), x=r)
+        
+        # geometry integral for Rotational Drag (whitney2010)
+        if os.path.isfile(wingShape_file+'.npz') and not force_reload:
+            print('Wing grid read from pre-computed *.npz file.')
+            Q = np.load(wingShape_file+'.npz')
+            xw, yw, dx, dy = Q['xw'], Q['yw'], Q['dx'], Q['dy']
+        else:
+            print('Evaluating wing shape')
+            dx, dy = 1e-3, 1e-3
+            xw, yw = insect_tools.get_wing_membrane_grid(wingShape_file, dx, dy)
+            np.savez(wingShape_file+'.npz', xw=xw, yw=yw, dx=dx, dy=dy)
+            
+        
+        self.S_RD[ii] = np.sum( xw*np.abs(xw) ) * dx*dy        
+        self.S_test[ii] =  np.sum(yw**3 ) *dx*dy#np.sum( yw**2 )*dx*dy
 
         # area moments:
-        self.S2 = self.Ild
-        self.S1 = simpson(Cr(r), x=r)
-        self.S0 = area
+        self.S2[ii] = simpson(Cr2(r), x=r) #second moment of area for lift/drag calculations
+        self.S1[ii] = simpson(Cr(r), x=r)
+        self.S0[ii] = area
 
         self.hinge_index   = np.argmin( self.x_wingContour_w[:, 1] )
         self.wingtip_index = np.argmax( self.x_wingContour_w[:, 1] )
 
         # for kleemeier wing, integration did not work properly...
         if np.isnan(self.Iam): self.Iam = 1.0
-        if np.isnan(self.Iwe): self.Iwe = 1.0
-        if np.isnan(self.Ild): self.Ild = 1.0
-        if np.isnan(self.Irot): self.Irot = 1.0
-        if np.isnan(self.S2): self.S2 = 1.0
-        if np.isnan(self.S1): self.S1 = 1.0
-        if np.isnan(self.S0): self.S0 = 1.0
+        # if np.isnan(self.Irot): self.Irot = 1.0
+        # if self.S2(np.isnan(self.S2)): self.S2(np.isnan(self.S2)) = 1.0
+        # if np.isnan(self.S1): self.S1 = 1.0
+        # if np.isnan(self.S0): self.S0 = 1.0
