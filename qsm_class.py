@@ -22,12 +22,6 @@ import finite_differences
 latex = plt.rcParams["text.usetex"]
 
 deg2rad = np.pi/180.0
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# TODO:
-#   - model for two wings
-#   - body force model
-#   - inertial power
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def norm(x):
     return( np.linalg.norm(x.flatten()) )
@@ -38,8 +32,6 @@ def normalize_vector( vector ):
         vector /= mag
 
     return vector
-
-
 
 def apply_rotations_to_vectors(M, x):
     """
@@ -72,6 +64,8 @@ def apply_rotations_to_vectors(M, x):
 
 
 
+
+
 class QSM:
     """
     QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
@@ -91,10 +85,12 @@ class QSM:
         are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
         similar using the three models. 
     """
-    def __init__(self, nt=300, nruns=1, timeline=None, model_CL_CD='Dickinson'):
+    def __init__(self, nt=300, nruns=1, timeline=None, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip'):
         
         
-        self.AM_model = 'Full 6DOF'
+        self.AM_model = 'Full 6DOF scaled'
+        self.model_terms = model_terms
+        self.ellington_type = ellington_type
         
         self.nt = nt
         self.model_CL_CD = model_CL_CD
@@ -173,6 +169,9 @@ class QSM:
 
         self.u_infty_w = np.zeros((nt*nruns,3))
         self.u_infty_g = np.zeros((nt*nruns,3))
+        
+        self.P_QSM_nonoptimized = np.zeros((nt*nruns))
+        self.P_QSM = np.zeros((nt*nruns))
 
         self.F_QSM_w = np.zeros((nt*nruns,3))
         self.F_QSM_g = np.zeros((nt*nruns,3))
@@ -209,6 +208,10 @@ class QSM:
         self.x0_forces = np.zeros((15))
         self.x0_moments = np.zeros((2))
         self.x0_power = np.zeros((2))
+        
+        self.K_forces_individual = np.zeros((nruns))
+        self.K_moments_individual = np.zeros((nruns))
+        self.K_power_individual = np.zeros((nruns))
 
         self.psi = np.zeros((nt*nruns))
         self.beta = np.zeros((nt*nruns))
@@ -223,8 +226,8 @@ class QSM:
         self.D2 = finite_differences.D22(self.nt, self.dt)
 
 
-    def parse_many_run_directorys(self, run_directories, params_file, kinematics_file='kinematics.t', 
-                                  T0=1.0, wing='right', plot=False, setup_wing_shape=True):
+    def parse_many_run_directorys(self, run_directories, kinematics_file='kinematics.t', 
+                                  T0=1.0, wing='right', plot=False, setup_wing_shape=True, verbose=True):
         """
         This function is for reading in a bunch of CFD runs in order to fit a single
         QSM model to many runs. It parses the kinematics data (either kinematics.t or an *.ini
@@ -257,8 +260,10 @@ class QSM:
         for run in run_directories:
             run += '/'
             
+            PARAMS = inifile_tools.find_WABBIT_main_inifile(run)
+            
             if setup_wing_shape:
-                file_WingShape = inifile_tools.get_ini_parameter( inifile_tools.find_WABBIT_main_inifile(run), 'Insects', 'WingShape', str, 'none')[0]
+                file_WingShape = inifile_tools.get_ini_parameter( PARAMS , 'Insects', 'WingShape', str, 'none')[0]
                 file_WingShape = file_WingShape.replace('from_file::','')
                 
                 if not os.path.isfile(run+file_WingShape):
@@ -267,10 +272,10 @@ class QSM:
                                      Please check if the PARAMS file (%s) refers to an existing WING *.ini file. Note: it may be
                                      that the QSM code incorrectly identifies the ShapeFile, if two distinct ones are used for left/right wing.""")
                 
-                self.setup_wing_shape( run+file_WingShape, i0=i0)
+                self.setup_wing_shape( run+file_WingShape, i0=i0, verbose=verbose)
             
-            self.parse_kinematics( params_file=run+params_file, kinematics_file=run+kinematics_file, wing=wing, i0=i0, plot=plot  )
-            self.read_CFD_data(run, T0, i0)
+            self.parse_kinematics( params_file=PARAMS, kinematics_file=run+kinematics_file, wing=wing, i0=i0, plot=plot, verbose=verbose  )
+            self.read_CFD_data(run, T0, i0, verbose=verbose)
 
             i0 += self.nt
 
@@ -360,6 +365,8 @@ class QSM:
         ax.set_zlabel('$z/R$')
         
         ax.legend()
+        
+        
 
     def kinematics_3D_animation(self, fnames_out="visualization3D", directory='./', dark_plot=False, dpi=200):
         """
@@ -381,9 +388,12 @@ class QSM:
             print('Animation 3D visualization saving: ' + fname_out)
             
             plt.savefig( fname_out, dpi=dpi )
+            
+    def read_kinematics(self, params_file, kinematics_file='kinematics.t'):
+        print('hi')
 
     def parse_kinematics(self, params_file, kinematics_file=None, u_infty_g=None, plot=True, wing='auto', yawpitchroll0=None, eta_stroke=None, i0=0,
-                         alpha=None, phi=None, theta=None, psi=None, beta=None, gamma=None, verbose=True, optimized_loading=True):
+                         alpha=None, phi=None, theta=None, psi=None, beta=None, gamma=None, verbose=True, optimized_loading=True, T0=0.0):
         """
         Evaluate the kinematics (i.e. compute many rotation matrices etc) and store the results
         in the QSM class arrays. You must run this before you can fit the QSM to the CFD data.
@@ -508,11 +518,10 @@ class QSM:
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 import datetime
-                # we awaly assume periodic kinematics here and thus for the kine it makse no difference which cycle
-                T0 = 0
                 # size of the *.t file (to check if this changed)
                 size_t = os.path.getsize(kinematics_file)
                 run_directory = kinematics_file.replace('kinematics.t', '')
+                
                 # optimized loading - convert to NPZ on first call, then read that
                 reloading_required, Q = False, None
                 if optimized_loading:
@@ -544,7 +553,7 @@ class QSM:
 
                 if not optimized_loading or reloading_required:
                     # load kinematics data by means of load_t_file function from insect_tools library
-                    kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline, 
+                    kinematics_cfd = insect_tools.load_t_file(kinematics_file, interp=True, time_out=self.timeline+T0, 
                                                               verbose=verbose, optimized_loading=True)
                     
                     if optimized_loading:
@@ -560,8 +569,10 @@ class QSM:
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                 
-                
-                
+                # Body velocity 
+                self.u_infty_g[ii,0] = diff1( kinematics_cfd[:, 1].copy(), dt )
+                self.u_infty_g[ii,1] = diff1( kinematics_cfd[:, 2].copy(), dt )
+                self.u_infty_g[ii,2] = diff1( kinematics_cfd[:, 3].copy(), dt )                
 
                 self.psi[ii]   = kinematics_cfd[:, 4].copy()
                 self.beta[ii]  = kinematics_cfd[:, 5].copy()
@@ -668,12 +679,12 @@ class QSM:
 
         # WING angular velocities in various frames        
         rot_wing_s = np.zeros_like( self.rot_wing_w )
-        if wing == 'left':
+        if side == 'left':
             rot_wing_s[ii,0] = self.phi_dt[ii]-np.sin(self.theta[ii])*self.alpha_dt[ii]
             rot_wing_s[ii,1] = np.cos(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]-np.sin(self.phi[ii])*self.theta_dt[ii]
             rot_wing_s[ii,2] = np.sin(self.phi[ii])*np.cos(self.theta[ii])*self.alpha_dt[ii]+np.cos(self.phi[ii])*self.theta_dt[ii]
 
-        elif wing == 'right':
+        elif side == 'right':
             rot_wing_s[ii,0] = -self.phi_dt[ii]-np.sin(self.theta[ii])*(-self.alpha_dt[ii])
             rot_wing_s[ii,1] = np.cos(-self.phi[ii])*np.cos(self.theta[ii])*(-self.alpha_dt[ii])-np.sin(-self.phi[ii])*self.theta_dt[ii]
             rot_wing_s[ii,2] = np.sin(-self.phi[ii])*np.cos(self.theta[ii])*(-self.alpha_dt[ii])+np.cos(-self.phi[ii])*self.theta_dt[ii]
@@ -692,8 +703,8 @@ class QSM:
         # if it is not passed, we try to extract the insects cruising speed from the PARAMS file
         if u_infty_g is None:
             u_infty_g = -np.asarray( wt.get_ini_parameter(params_file, 'ACM-new', 'u_mean_set', vector=True) ) # note sign change (wind vs body)
-        # insects cruising speed
-        self.u_infty_g[ii, :] = np.matlib.repmat( u_infty_g, nt, 1)
+        # insects cruising speed (including body velocity and negative wind velocity)
+        self.u_infty_g[ii, :] += np.matlib.repmat( u_infty_g, nt, 1)
         # flight velocity in the wing system 
         self.u_infty_w[ii, :] = apply_rotations_to_vectors(self.M_g2w[ii,:,:], self.u_infty_g[ii,:])
        
@@ -724,7 +735,8 @@ class QSM:
         
         # angle of attack
         v = self.ex_wing_g[ii,0]*(-self.e_drag_g[ii,0]) + self.ex_wing_g[ii,1]*(-self.e_drag_g[ii,1]) + self.ex_wing_g[ii,2]*(-self.e_drag_g[ii,2])
-        self.AoA[ii] = np.arccos(v)
+        self.AoA[ii] = np.arccos(v)        
+        # self.AoA[ii] = self.alpha[ii]
         
         # calculation of wingtip acceleration and angular acceleration in wing reference frame
         # a second loop over time is required, because we first need to compute ang. vel. then diff it here.
@@ -769,7 +781,7 @@ class QSM:
         if len(ipeaks) != 2 :
             plt.figure()
     #plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.u_tip_mag[ii]]) ) )
-            plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.planar_rot_wing_mag[ii]]) ) )
+            plt.plot( np.hstack([self.timeline_all[ii], self.timeline_all[ii]+1, self.timeline_all[ii]+2]), -1*np.hstack(  (3*[self.planar_rot_wing_mag[ii]]) ) )
             plt.xlabel('timeline (repeated identical cycle 3 times)')
             plt.ylabel('u_tip_mag (wing=%s)' % (self.wing))
             plt.plot( self.timeline[ipeaks]+0, -1*self.u_tip_mag[ipeaks], 'ro')
@@ -810,87 +822,8 @@ class QSM:
         # kinematics figure
         #----------------------------------------------------------------------
         if plot:
-            ## FIGURE 1
-            fig, axes = plt.subplots(3, 2, figsize = (15, 15))
-
-            # angles
-            ax = axes[0,0]
-            ax.plot(self.timeline, np.degrees(self.phi[ii]), label='$\\phi$')
-            ax.plot(self.timeline, np.degrees(self.alpha[ii]), label ='$\\alpha$')
-            ax.plot(self.timeline, np.degrees(self.theta[ii]), label='$\\theta$')
-            ax.plot(self.timeline, np.degrees(self.AoA[ii]), label='AoA', color = 'purple')
-            ax.set_xlabel('$t/T$')
-            ax.set_ylabel('(deg)')
-            ax.legend()
-
-            # time derivatives of angles
-            ax = axes[0,1]
-            ax.plot(self.timeline, self.phi_dt[ii], label='$\\dot\\phi$')
-            ax.plot(self.timeline, self.alpha_dt[ii], label='$\\dot\\alpha$')
-            ax.plot(self.timeline, self.theta_dt[ii], label='$\\dot\\theta$')
-
-            if self.wing == "right" or self.wing == "right2" :
-                ax.plot(self.timeline, np.sign(-self.alpha[ii]), 'k--', label='$\\mathrm{sign}(\\alpha)$', linewidth=0.5 )
-            elif self.wing == "left" or self.wing == "left2" :
-                ax.plot(self.timeline, np.sign(+self.alpha[ii]), 'k--', label='$\\mathrm{sign}(\\alpha)$', linewidth=0.5 )
-            ax.set_xlabel('$t/T$')
-            ax.legend()
-
-            # u_wing_w (tip velocity in wing reference frame )
-            ax = axes[1,0]
+            self.plot_kinematics()
             
-            ax.plot(self.timeline, self.u_tip_w[ii, 0], label='$u_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.u_tip_w[ii, 1], label='$u_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.u_tip_w[ii, 2], label='$u_{\\mathrm{wing},z}^{(w)}$')
-            ax.plot(self.timeline, self.u_tip_mag[ii], 'k--', label='$\\left| \\underline{u}_{\\mathrm{wing}} \\right|$')
-
-            ax.set_xlabel('$t/T$')
-            ax.set_ylabel('[Rf]')
-            if latex:
-                ax.set_title('Tip velocity in wing reference frame, $\\mathrm{mean}\\left( \\left| \\underline{u}_{\\mathrm{wing}}\\right|\\right)=%2.2f$' % (np.mean(self.u_tip_mag)))
-            else:
-                ax.set_title('Tip velocity magnitude in wing reference frame = %2.2f' % (np.mean(self.u_tip_mag)))
-            ax.legend()
-
-            #a_wing_w (tip acceleration in wing reference frame )
-            ax = axes[1,1]
-            ax.plot(self.timeline, self.a_tip_w[ii, 0], label='$\\dot{u}_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.a_tip_w[ii, 1], label='$\\dot{u}_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.a_tip_w[ii, 2], label='$\\dot{u}_{\\mathrm{wing},z}^{(w)}$')
-            ax.set_xlabel('$t/T$')
-            ax.set_ylabel('$Rf^2$')
-            ax.set_title('Tip acceleration in wing reference frame')
-            ax.legend()
-
-            #rot_wing_w (tip velocity in wing reference frame )
-            ax = axes[2,0]
-            ax.plot(self.timeline, self.rot_wing_w[ii, 0], label='$\\Omega_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.rot_wing_w[ii, 1], label='$\\Omega_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.rot_wing_w[ii, 2], label='$\\Omega_{\\mathrm{wing},z}^{(w)}$')
-            ax.set_xlabel('$t/T$')
-            ax.set_ylabel('rad/T')
-            ax.set_title('Angular velocity in wing reference frame')
-            ax.legend()
-
-            #rot_acc_wing_w (angular acceleration in wing reference frame )
-            ax = axes[2,1]
-            ax.plot(self.timeline, self.rot_acc_wing_w[ii, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
-            ax.plot(self.timeline, self.rot_acc_wing_w[ii, 1], label='$\\dot\\Omega_{\\mathrm{wing},y}^{(w)}$')
-            ax.plot(self.timeline, self.rot_acc_wing_w[ii, 2], label='$\\dot\\Omega_{\\mathrm{wing},z}^{(w)}$')
-
-            ax.plot(self.timeline, np.sqrt(self.rot_acc_wing_w[ii, 0]**2+self.rot_acc_wing_w[ii, 1]**2+self.rot_acc_wing_w[ii, 2]**2), 'k--', label='mag')
-            ax.set_xlabel('$t/T$')
-            ax.set_ylabel('[rad/T²]')
-            ax.set_title('Angular acceleration in wing reference frame')
-            ax.legend()
-
-            plt.suptitle('Kinematics data')
-
-            plt.tight_layout()
-            plt.draw()
-
-            for ax in axes.flatten():
-                insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
 
     def print_force_coeefs(self):
 
@@ -1020,66 +953,38 @@ class QSM:
         # computing it here is the better choice if possibly more than one wing has been simulated.·
         self.P_CFD[ii] = -(  np.sum( self.M_CFD_w[ii,:]*self.rot_wing_w[ii,:], axis=1 ) )
 
-    def evaluate_QSM_model(self, plot=True, model_terms=[True, True, True, True, True]):
+    def evaluate_QSM_model(self, plot=False):
         """
         This function is a wrapper for FIT_TO_CFD. It evaluates the QSM model with a given set of
         previously determined coefficients. You need to parse kinematics data before you can call this
         function.
         """
-
-        self.fit_to_CFD(plot=plot, optimize=False, N_trials=1, model_terms=model_terms)
+        # first the forces - otherwise we cannot compute the moments
+        self.evaluate_forces(self.x0_forces, training=False)
+        # compute moments (with constant lever assumption)
+        self.evaluate_moments(self.x0_moments, training=False)
+        # compute power (with constant lever assumption)
+        self.evaluate_power(self.x0_power, training=False)
         
+        if plot:
+            self.plot_dynamics()
         
-    def evaluate_forces(self, x0=None, model_terms=[True, True, True, True, True], ellington_type='utip'):
+    def evaluate_forces(self, x0, training=False):
         """
-        Evaluate QSM force model with the current set of parameters x0
+        Evaluate QSM force model with the current set of parameters x0. 
         """
         
-        if x0 is None:
-            x0 = self.x0_forces
-        
-        def getAerodynamicCoefficients(self, x0, AoA):
-            deg2rad = np.pi/180.0
-            rad2deg = 180.0/np.pi
-
-            if self.model_CL_CD == "Dickinson":
-                # Cl and Cd definitions from Dickinson 1999
-                AoA = rad2deg*AoA
-                Cl   = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
-                Cd   = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
-            elif self.model_CL_CD == "Nakata":
-                # this is what nakata proposed:
-                Cl   = x0[0]*(AoA**3 - AoA**2 * np.pi/2) + x0[1]*(AoA**2 - AoA * np.pi/2)
-                Cd   = x0[2]*np.cos( AoA )**2  + x0[3]*np.sin( AoA )**2
-            elif self.model_CL_CD == 'Polhamus':
-                # see J-S Han et al Bioinspr Biomim 12 2017 036004
-                Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
-                Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
-            
-            else:
-                raise ValueError("The CL/CD model must be either [Dickinson/Nakata/Polhamus]")
-
-            Crot = x0[4]
-            Cam1 = x0[5]
-            Cam2 = x0[6]
-            Crd  = x0[7]
-            Cam3 = x0[8]
-            Cam4 = x0[9]
-            Cam5 = x0[10]
-            Cam6 = x0[11]
-            Cam7, Cam8, Cam9 = x0[12], x0[13], x0[14]
-
-            return Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 # currently CAM9 is unused!
-        
-        Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 = getAerodynamicCoefficients(self, x0, self.AoA)
+        # unpack coefficients from parameter vector
+        Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 = self.unpack_parameters(x0)
 
         rho = 1.0 # for future work, can also be set to 1.0 simply
        
-        if np.max(self.S2) < 1.0e-10:
-            raise ValueError("""We try to evaluate the QSM model, but the S2 (shape function) seems to be
-                             all zeros. Probably you did not setup the wing shape before evaluating the model,
+        if np.max(self.S2-1.0) < 1.0e-10:
+            import warnings
+            warnings.warn("""We try to evaluate the QSM model, but the S2 (shape function) seems to be
+                             all ones. Probably you did not setup the wing shape before evaluating the model,
                              please do so using the function QSM.setup_wing_shape(). 
-                             Alternatively, you can manually set QSM.S2 to a desired value (not reommended).""")
+                             Alternatively, you can manually set QSM.S2 to a desired value (not recommended).""")
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # lift/drag forces
@@ -1089,25 +994,27 @@ class QSM:
         # common planar_rot_wing_mag, he used u_tip_mag, which includes the flight velocity
         # and thus delivers nonzero values even for still wings. Cai integrated over the blades, and each blade
         # had the correct velocity. This can be done analytically, as we do here, see my lecture notes.
-        if model_terms[0] is True:
-            if ellington_type == 'utip':
+        if self.model_terms[0] is True:
+            if self.ellington_type == 'utip':
                 self.Ftc_mag = 0.5*rho*Cl*(self.u_tip_mag**2)*self.S2
                 self.Ftd_mag = 0.5*rho*Cd*(self.u_tip_mag**2)*self.S2
                 
-            elif ellington_type == 'rot':
+            elif self.ellington_type == 'rot':
                 self.Ftc_mag = 0.5*rho*Cl*(self.planar_rot_wing_mag**2)*self.S2
                 self.Ftd_mag = 0.5*rho*Cd*(self.planar_rot_wing_mag**2)*self.S2
                 
-            elif ellington_type == 'ABC':
+            elif self.ellington_type == 'ABC':
                 # Using the bumblebee simulations at various u_infty values, the best choice for ellington_type is 'utip'.
-                # Despite the fact that a similar result (ABC) is presented in Han et al 2017 (An aerodynamic model for isect flapping wings in forward flight)
+                # Despite the fact that a similar result (ABC) is presented in Han et al 2017 (An aerodynamic model for insect
+                # flapping wings in forward flight)
                 A = self.planar_rot_wing_mag**2
                 B = 2.0*(self.u_infty_w[:,2]*self.rot_wing_w[:,0]-self.u_infty_w[:,0]*self.rot_wing_w[:,2])
                 C = self.u_infty_w[:,0]**2+self.u_infty_w[:,1]**2+self.u_infty_w[:,2]**2
 
-
                 self.Ftc_mag = 0.5*rho*Cl*( self.S2*A + self.S1*B + self.S0*C )
                 self.Ftd_mag = 0.5*rho*Cd*( self.S2*A + self.S1*B + self.S0*C )
+            else:
+                raise ValueError("The value ellington_type=%s is unkown" % (self.ellington_type))
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # rotational forces
@@ -1115,9 +1022,9 @@ class QSM:
         # These formulations differ slightly from the above classical ones, because we include the body velocity
         # and use the angular velocity instead of alpha, alpha_dt.
         # Sane's original rotational force, "discovered" in Dickinson1999 and later modeled by Sane2002
-        if model_terms[1] is True:
+        if self.model_terms[1] is True:
             # if ellington_type == 'rot':
-            #     self.Frc_mag[:] = rho*Crot*self.planar_rot_wing_mag*self.rot_wing_w[:,1]*Irot # Nakata et al. 2015, Eqn. 2.6c
+            #     self.Frc_mag = rho*Crot*self.planar_rot_wing_mag*self.rot_wing_w[:,1]*self.S_RC # Nakata et al. 2015, Eqn. 2.6c
             # else:
             self.Frc_mag = rho*Crot*self.u_tip_mag*self.rot_wing_w[:,1]*self.S_RC # Nakata et al. 2015, Eqn. 2.6c
 
@@ -1130,7 +1037,7 @@ class QSM:
         # However, why neglecting the non-normal part, unless very helpful?
         # It is however correct that Cai says: as the Ellington terms do only include the velocity of the blade point on the
         # rotation axis (the point $(0,r,0)^T$), the rotation around that very axis ($y$) is not included in the traditional term.
-        if model_terms[2] is True:
+        if self.model_terms[2] is True:
             self.Frd_mag = (-1/2)*rho*Crd*self.S_RD*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1] # Cai et al. 2021, Eqn 2.13
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1150,16 +1057,51 @@ class QSM:
         #
         # We follow this argument.
         #
-        if model_terms[3] is True:
-            self.Fam_z_mag = rho*(Cam1*self.a_tip_w[:, 0] + Cam2*self.a_tip_w[:, 1] + Cam3*self.a_tip_w[:, 2] + \
-                                  Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] )   
+        if self.model_terms[3] is True:
+            if self.AM_model == 'Full 6DOF':
+                self.Fam_z_mag = rho*(Cam1*self.a_tip_w[:, 0] + Cam2*self.a_tip_w[:, 1] + Cam3*self.a_tip_w[:, 2] + \
+                                      Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] )   
+                    
+            elif self.AM_model == '6DOF - rot':
+                self.Fam_z_mag = rho*(Cam1*self.rot_wing_w[:, 0] + Cam2*self.rot_wing_w[:, 1] + Cam3*self.rot_wing_w[:, 2] + \
+                                      Cam4*self.rot_acc_wing_w[:, 0] + Cam5*self.rot_acc_wing_w[:, 1] + Cam6*self.rot_acc_wing_w[:, 2] )    
+                    
+            elif self.AM_model == '1DOF':
+                self.Fam_z_mag = rho*(Cam3*self.a_tip_w[:, 2])
+                
+            elif self.AM_model == '1DOF scaled':
+                self.Fam_z_mag = rho*(self.S_AM1*Cam3*self.a_tip_w[:, 2])   
+                
+            elif self.AM_model == '2DOF theoretical':
+                self.Fam_z_mag = rho*(Cam3*self.a_tip_w[:, 2] + Cam5*self.rot_acc_wing_w[:, 1])
+                
+            elif self.AM_model == '2DOF theoretical scaled1':
+                self.Fam_z_mag = rho*(Cam3*self.S_AM1*self.a_tip_w[:, 2] + Cam5*self.rot_acc_wing_w[:, 1])
+                
+            elif self.AM_model == '2DOF theoretical scaled2':
+                self.Fam_z_mag = rho*(Cam3*self.S_AM1*self.a_tip_w[:, 2] + self.S_AM2*Cam5*self.rot_acc_wing_w[:, 1])
+                
+            elif self.AM_model == '2DOF best scaled2':
+                self.Fam_z_mag = rho*(Cam3*self.S_AM1*self.a_tip_w[:, 2] + self.S_AM2*Cam4*self.rot_acc_wing_w[:, 0])                
+            
+            elif self.AM_model == '2DOF best scaled1':
+                self.Fam_z_mag = rho*(Cam3*self.S_AM1*self.a_tip_w[:, 2] + Cam4*self.rot_acc_wing_w[:, 0])                
+            
+            elif self.AM_model == '2DOF best':
+                self.Fam_z_mag = rho*(Cam3*self.a_tip_w[:, 2] + Cam4*self.rot_acc_wing_w[:, 0])   
+                
+            elif self.AM_model == 'Full 6DOF scaled':
+                self.Fam_z_mag = rho*(self.S_AM1*Cam1*self.a_tip_w[:, 0] + self.S_AM1*Cam2*self.a_tip_w[:, 1] + self.S_AM1*Cam3*self.a_tip_w[:, 2] + \
+                                      self.S_AM2*Cam4*self.rot_acc_wing_w[:, 0] + self.S_AM2*Cam5*self.rot_acc_wing_w[:, 1] + self.S_AM2*Cam6*self.rot_acc_wing_w[:, 2] )                   
+            else:
+                raise ValueError("unknown AM model")
 
         # *Tangential* added mass forces, like discussed in VanVeen2022, 2.1.1.
         # We assume however a more general form, which includes the components of the acceleration.
         # We do not include the acceleration in y-direction, even though it significantly reduces the error.
         # The reason is that apparently, this form has overlap with the lift+drag forces from the Ellington model
         # and thus the resulting model becomes harder to interpret.
-        if model_terms[4] is True:
+        if self.model_terms[4] is True:
             self.Fam_x_mag = rho*(Cam7*self.a_tip_w[:, 0] + Cam8*self.a_tip_w[:, 2])
 
         # this even more complete model that included all wing acceleration components proved not a big improvement
@@ -1186,19 +1128,98 @@ class QSM:
             self.F_QSM_g[:, k] = self.Ftc[:, k] + self.Ftd[:, k] + self.Frc[:, k] + self.Fam[:, k] + self.Fam2[:, k] + self.Frd[:, k]
 
         # QSM forces in wing system:
-        self.F_QSM_w = apply_rotations_to_vectors(self.M_g2w, self.F_QSM_g)
+        if not training:
+            self.F_QSM_w = apply_rotations_to_vectors(self.M_g2w, self.F_QSM_g)
         
-    def evaluate_moments(self, model_terms=[True, True, True, True, True]):
+    def evaluate_moments(self, x0, training=False):
         """
-        Evaluate QSM moments model with the current set of parameters (stored in self.x0_moments)
+        Evaluate QSM moments model with the current set of parameters (stored in self.x0_moments).
+        Requires to call evaluate_forces before (can't compute moments without forces)
         """
+        # here we define the the QSM moments as: M_QSM = [ C_lever_x_w*Fz_QSM_w, -C_lever_x_w*Fz_QSM_w, C_lever_x_w*Fy_QSM_w - C_lever_y_w*F_x_QSM_w ]
+        # where C_lever_x_w and C_lever_y_w correspond to the spanwise and the chordwise locations of the lever in the wing reference frame.
+        # vector form: C_lever_w = [C_lever_x_w, C_lever_y_w, 0]
+        C_lever_x_w = x0[0]
+        C_lever_y_w = x0[1]
+
+        # moment in wing reference frame
+        self.M_QSM_w[:,0] =  C_lever_y_w*self.F_QSM_w[:, 2]
+        self.M_QSM_w[:,1] = -C_lever_x_w*self.F_QSM_w[:, 2]
+        self.M_QSM_w[:,2] =  C_lever_x_w*self.F_QSM_w[:, 1] - C_lever_y_w*self.F_QSM_w[:, 0]
         
-    def evaluate_power(self, model_terms=[True, True, True, True, True]):
+        if not training:
+            # compute QSM moment in global reference frame
+            self.M_QSM_g = apply_rotations_to_vectors(self.M_w2g, self.M_QSM_w)
+        
+        
+    def evaluate_power(self, x0, training=False):
         """
         Evaluate QSM power model with the current set of parameters (stored in self.x0_power)
         """
+        
+        # here we define the the QSM moments as: M_QSM = [ C_lever_x_w_power*Fz_QSM_w, -C_lever_x_w_power*Fz_QSM_w, C_lever_x_w_power*Fy_QSM_w - C_lever_y_w_power*F_x_QSM_w ]
+        # where C_lever_x_w_power and C_lever_y_w_power correspond to the spanwise and the chordwise locations of the lever in the wing reference frame.
+        # vector form: C_lever_w = [C_lever_x_w_power, C_lever_y_w_power, 0]
 
-    def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, model_terms=[True, True, True, True, True], verbose=True, ellington_type='utip'):
+        C_lever_x_w_power = x0[0]
+        C_lever_y_w_power = x0[1]
+
+        Mx_QSM_w_power =  C_lever_y_w_power*self.F_QSM_w[:, 2]
+        My_QSM_w_power = -C_lever_x_w_power*self.F_QSM_w[:, 2]
+        Mz_QSM_w_power =  C_lever_x_w_power*self.F_QSM_w[:, 1] - C_lever_y_w_power*self.F_QSM_w[:, 0]
+
+        # power using the moments (need to call evaluate_moments first)
+        # this is the optimal lever for moment computation
+        if not training:
+            self.P_QSM_nonoptimized = -(self.M_QSM_w[:,0]*self.rot_wing_w[:, 0]
+                                      + self.M_QSM_w[:,1]*self.rot_wing_w[:, 1]
+                                      + self.M_QSM_w[:,2]*self.rot_wing_w[:, 2])
+        
+        # best estimate of the power using a constant lever optimized for power prediction.
+        self.P_QSM = -(Mx_QSM_w_power*self.rot_wing_w[:, 0]
+                     + My_QSM_w_power*self.rot_wing_w[:, 1]
+                     + Mz_QSM_w_power*self.rot_wing_w[:, 2])
+        
+        
+    def unpack_parameters(self, x0, AoA=None):
+        deg2rad = np.pi/180.0
+        rad2deg = 180.0/np.pi
+        
+        if AoA is None:
+            AoA = self.AoA
+
+        if self.model_CL_CD == "Dickinson":
+            # Cl and Cd definitions from Dickinson 1999
+            AoA = rad2deg*AoA
+            Cl   = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+            Cd   = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+        elif self.model_CL_CD == "Nakata":
+            # this is what nakata proposed:
+            Cl   = x0[0]*(AoA**3 - AoA**2 * np.pi/2) + x0[1]*(AoA**2 - AoA * np.pi/2)
+            Cd   = x0[2]*np.cos( AoA )**2  + x0[3]*np.sin( AoA )**2
+        elif self.model_CL_CD == 'Polhamus':
+            # see J-S Han et al Bioinspr Biomim 12 2017 036004
+            Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
+            Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
+        
+        else:
+            raise ValueError("The CL/CD model must be either Dickinson or Nakata")
+
+        Crot = x0[4]
+        Cam1 = x0[5]
+        Cam2 = x0[6]
+        Crd  = x0[7]
+        Cam3 = x0[8]
+        Cam4 = x0[9]
+        Cam5 = x0[10]
+        Cam6 = x0[11]
+        Cam7, Cam8, Cam9 = x0[12], x0[13], x0[14]
+
+        return Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 # currently CAM9 is unused!
+
+
+
+    def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, verbose=True):
         """
         Train the QSM model with one/many CFD run(s). 
         ------------------
@@ -1218,12 +1239,9 @@ class QSM:
         optimize: if True, we train the QSM model with previously read CFD data.
                   if False, this function evaluates the model with the parsed kinematics, with given QSM model coefficients
         """
-
-        # special time vector used for plotting if many runs are present
-        times = []
-        for irun in range(self.nruns):
-            times.append(self.timeline+irun)
-        tt = np.hstack(times)
+        
+        if verbose:
+            print('~~~~~~~~~~~~~~~Model training starting~~~~~~~~~~~~~~~~~~~~~')
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # remove nans and infs, and hope for the best
@@ -1238,130 +1256,37 @@ class QSM:
         self.P_CFD[np.isinf(self.P_CFD)] = 0
         self.P_CFD[np.isnan(self.P_CFD)] = 0
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        def getAerodynamicCoefficients(self, x0, AoA):
-            deg2rad = np.pi/180.0
-            rad2deg = 180.0/np.pi
-
-            if self.model_CL_CD == "Dickinson":
-                # Cl and Cd definitions from Dickinson 1999
-                AoA = rad2deg*AoA
-                Cl   = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
-                Cd   = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
-            elif self.model_CL_CD == "Nakata":
-                # this is what nakata proposed:
-                Cl   = x0[0]*(AoA**3 - AoA**2 * np.pi/2) + x0[1]*(AoA**2 - AoA * np.pi/2)
-                Cd   = x0[2]*np.cos( AoA )**2  + x0[3]*np.sin( AoA )**2
-            elif self.model_CL_CD == 'Polhamus':
-                # see J-S Han et al Bioinspr Biomim 12 2017 036004
-                Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
-                Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
             
-            else:
-                raise ValueError("The CL/CD model must be either Dickinson or Nakata")
 
-            Crot = x0[4]
-            Cam1 = x0[5]
-            Cam2 = x0[6]
-            Crd  = x0[7]
-            Cam3 = x0[8]
-            Cam4 = x0[9]
-            Cam5 = x0[10]
-            Cam6 = x0[11]
-            Cam7, Cam8, Cam9 = x0[12], x0[13], x0[14]
-
-            return Cl, Cd, Crot, Cam1, Cam2, Crd, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8, Cam9 # currently CAM9 is unused!
-
-        #%% force optimization
-        # cost function which tells us how far off our QSM values are from the CFD ones for the forces
-        def cost_forces( x, self, show_plots=False):
-            # evaluate forces with current set of parameters            
-            self.evaluate_forces(x, model_terms, ellington_type)
-
+        #%% force optimization        
+        def compute_K_forces( F_QSM_g, F_CFD_g ):
             # compute quality metric (relative L2 error)
-            K_forces     = norm(self.F_QSM_g[:,0]-self.F_CFD_g[:,0]) + norm(self.F_QSM_g[:,2]-self.F_CFD_g[:,2])
-            K_forces_den = norm(self.F_CFD_g[:,0]) + norm(self.F_CFD_g[:,2])
+            K_forces     = norm(F_QSM_g[:,0]-F_CFD_g[:,0]) + norm(F_QSM_g[:,2]-F_CFD_g[:,2])
+            K_forces_den = norm(F_CFD_g[:,0]) + norm(F_CFD_g[:,2])
             # normalization
             if K_forces_den >= 1e-16:
                 K_forces /= K_forces_den
-            
-
-            if show_plots:
-                ##FIGURE 2
-                fig, axes = plt.subplots(2, 2, figsize = (15, 10))
-
-                #coefficients
-                graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
-                gCl, gCd, gCrot, gCam1, gCam2, gCrd, _, _,_,_, _,_,_  = getAerodynamicCoefficients(self, x, graphAoA)
-                axes[0, 0].plot(np.degrees(graphAoA), gCl, label='Cl', color='#0F95F1')
-                axes[0, 0].plot(np.degrees(graphAoA), gCd, label='Cd', color='#F1AC0F')
-                # ax.plot(np.degrees(graphAoA), gCrot*np.ones_like(gCl), label='Crot')
-                axes[0, 0].set_title('Lift and drag coeffficients')
-                axes[0, 0].set_xlabel('AoA[°]')
-                axes[0, 0].set_ylabel('[-]')
-                axes[0, 0].legend(loc = 'upper right')
-
-                #vertical forces
-                axes[0, 1].plot(tt, self.Ftc[:, 2], label = 'Vert. part of F_{TC} (Ellington1984 lift force)', color='gold')
-                axes[0, 1].plot(tt, self.Ftd[:, 2], label = 'Vert. part of F_{TD} (Ellington1984 drag force)', color='lightgreen')
-                axes[0, 1].plot(tt, self.Frc[:, 2], label = 'Vert. part of F_{RC}  (Sane2002, rotational force)', color='orange')
-                axes[0, 1].plot(tt, self.Fam[:, 2], label = 'Vert. part of F_{AMz} (Whitney2010)', color='red')
-                axes[0, 1].plot(tt, self.Fam2[:, 2], '--',label = 'Vert. part of F_{AMx} (vanVeen2022)', color='red')
-                axes[0, 1].plot(tt, self.Frd[:, 2], label = 'Vert. part of F_{RD} (Cai2021, Nakata2015)', color='green')
-                axes[0, 1].plot(tt, self.F_QSM_g[:,2], label = 'Total Vert. part of  QSM force', ls='-.', color='blue')
-                axes[0, 1].plot(tt, self.F_CFD_g[:,2], label = 'Total Vert. part of  CFD force', ls='--', color='k')
-                axes[0, 1].set_xlabel('$t/T$')
-                axes[0, 1].set_ylabel('force')
-                axes[0, 1].set_title('Vertical components of forces in global coordinate system')
-                axes[0, 1].legend(loc = 'best')
-
-                #qsm + cfd force components in wing reference frame
-                axes[1, 0].plot(tt, self.F_QSM_w[:, 0], label='Fx_QSM_w', c='r')
-                axes[1, 0].plot(tt, self.F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
-                axes[1, 0].plot(tt, self.F_QSM_w[:, 1], label='Fy_QSM_w', c='g')
-                axes[1, 0].plot(tt, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
-                axes[1, 0].plot(tt, self.F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
-                axes[1, 0].plot(tt, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
-                axes[1, 0].set_xlabel('$t/T$')
-                axes[1, 0].set_ylabel('force')
-                axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
-                axes[1, 0].legend(loc='best')
-
-                #forces
-                axes[1, 1].plot(tt[:], self.F_QSM_g[:,0], label='Fx_QSM_g', color='red')
-                axes[1, 1].plot(tt[:], self.F_CFD_g[:,0], label='Fx_CFD_g', linestyle = 'dashed', color='red')
-                axes[1, 1].plot(tt[:], self.F_QSM_g[:,1], label='Fy_QSM_g', color='green')
-                axes[1, 1].plot(tt[:], self.F_CFD_g[:,1], label='Fy_CFD_g', linestyle = 'dashed', color='green')
-                axes[1, 1].plot(tt[:], self.F_QSM_g[:,2], label='Fz_QSM_g', color='blue')
-                axes[1, 1].plot(tt[:], self.F_CFD_g[:,2], label='Fz_CFD_g', linestyle = 'dashed', color='blue')
-                axes[1, 1].set_xlabel('$t/T$')
-                axes[1, 1].set_ylabel('force')
-                if norm(self.F_CFD_g[:,0]) > 0.0 and norm(self.F_CFD_g[:,1]) > 0.0 and norm(self.F_CFD_g[:,2]) > 0.0:
-                    axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.2f" % (norm(self.F_QSM_g[:,0])/norm(self.F_CFD_g[:,0]),
-                                                                                        norm(self.F_QSM_g[:,1])/norm(self.F_CFD_g[:,1]),
-                                                                                        norm(self.F_QSM_g[:,2])/norm(self.F_CFD_g[:,2]),
-                                                                                        K_forces) )
-                else:
-                    axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.2f" % (norm(self.F_QSM_g[:,0]), norm(self.F_QSM_g[:,1]), norm(self.F_QSM_g[:,2]), K_forces) )
-                axes[1, 1].legend(loc = 'lower right')
-
-
-                for ax in axes.flatten()[1:]:
-                    insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
-
-                plt.tight_layout()
-                plt.draw()
+                
             return K_forces
+        
+        # cost function which tells us how far off our QSM values are from the CFD ones for the forces
+        def cost_forces( x, self ):
+            # evaluate forces with current set of parameters.
+            # Training=True skips computing forces in wing system which is not useful for the training (speed-up)
+            self.evaluate_forces(x, training=True)
+
+            # compute quality metric (relative L2 error)
+            return compute_K_forces( self.F_QSM_g, self.F_CFD_g)
 
         #----------------------------------------------------------------------
-        # optimizing using scipy.optimize.minimize which is faster
+        # TRAINING: find optimal set of coefficients
+        #----------------------------------------------------------------------
         if optimize:
             # as a means of informing the user that they need to read CFD data before fitting (training):
             if not self.readAtLeastOneCFDrun:
                 raise ValueError("You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
 
             start = time.time()
-            bounds = [(-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-6, 6), (-60, 60)]
             bounds = 15*[(-1000, 1000)]
             K_forces = 9e9
 
@@ -1370,19 +1295,19 @@ class QSM:
             # be omitted. Kept for safety - we do less likely get stuck in local minima this way
             for i_trial in range(N_trials):
                 x0_forces    = np.random.rand(15)
-                optimization = opt.minimize(cost_forces, args=(self, False), bounds=bounds, x0=x0_forces)
+                optimization = opt.minimize(cost_forces, args=(self), bounds=bounds, x0=x0_forces)
                 x0_forces    = optimization.x
                 
                 # for readability, remove unused coefficients
-                if not model_terms[0]:
+                if not self.model_terms[0]:
                     x0_forces[0:3+1] = np.nan
-                if not model_terms[1]:
+                if not self.model_terms[1]:
                     x0_forces[4] = np.nan
-                if not model_terms[2]:
+                if not self.model_terms[2]:
                     x0_forces[7] = np.nan
-                if not model_terms[3]:
+                if not self.model_terms[3]:
                     x0_forces[ [5,6,8, 9,10,11] ] = np.nan
-                if not model_terms[4]:
+                if not self.model_terms[4]:
                     x0_forces[ [12,13] ] = np.nan   
                 # unused:
                 x0_forces[14] = np.nan
@@ -1391,43 +1316,48 @@ class QSM:
                     K_forces = optimization.fun
                     x0_best = x0_forces
                 if verbose:
-                    print( 'Trial %i/%i K=%2.3f x0=' % (i_trial+1, N_trials, optimization.fun), np.round(x0_forces, 3))
+                    print( 'Trial %i/%i K=%2.3f N_evals=%i \nx0=' % (i_trial+1, N_trials, optimization.fun, optimization.nfev), np.round(x0_forces, 3))
 
             self.x0_forces = x0_best
-            self.K_forces = K_forces
+            self.K_forces  = K_forces
 
             if verbose:
                 print('Completed in:', round(time.time() - start, 4), 'seconds')
-                print('x0_optimized:', np.round(self.x0_forces, 5), '\nK_optimized_forces:', K_forces)
         
-
         # final evaluation (called even without optimization)
-        self.K_forces = cost_forces(self.x0_forces, self, show_plots=plot)
+        # global fit quality
+        self.evaluate_forces(self.x0_forces, training=False)
+        self.K_forces = compute_K_forces( self.F_QSM_g, self.F_CFD_g)
+                
+        # evaluate, for each run, the model quality (the local K_forces for each run)
+        for irun in range( self.nruns ):
+            i0 = irun*self.nt
+            jj = np.arange(start=i0, stop=i0+self.nt-1+1 )       
+            # error (K) for this CFD run:                         
+            self.K_forces_individual[irun] = compute_K_forces( self.F_QSM_g[jj], self.F_CFD_g[jj] )
         
         if verbose:
-            print("K_forces_final=%f" % (self.K_forces))
+            print("K_forces= %2.2f" % (self.K_forces))
+            
+            
+        
 
-        #%% moments optimization
-
-        #cost_moments is defined in terms of the moments. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM moments to their CFD counterparts
-        def cost_moments(x, self, show_plots=False):
-            #here we define the the QSM moments as: M_QSM = [ C_lever_x_w*Fz_QSM_w, -C_lever_x_w*Fz_QSM_w, C_lever_x_w*Fy_QSM_w - C_lever_y_w*F_x_QSM_w ]
-            #where C_lever_x_w and C_lever_y_w correspond to the spanwise and the chordwise locations of the lever in the wing reference frame.
-            #vector form: C_lever_w = [C_lever_x_w, C_lever_y_w, 0]
-            C_lever_x_w = x[0]
-            C_lever_y_w = x[1]
-
-            # moment in wing reference frame
-            self.M_QSM_w[:,0] =  C_lever_y_w*self.F_QSM_w[:, 2]
-            self.M_QSM_w[:,1] = -C_lever_x_w*self.F_QSM_w[:, 2]
-            self.M_QSM_w[:,2] =  C_lever_x_w*self.F_QSM_w[:, 1] - C_lever_y_w*self.F_QSM_w[:, 0]
-
-            K_moments = norm(self.M_QSM_w[:,0]-self.M_CFD_w[:,0]) + norm(self.M_QSM_w[:,1]-self.M_CFD_w[:,1]) + norm(self.M_QSM_w[:,2]-self.M_CFD_w[:,2])
-            K_moments_den = norm(self.M_CFD_w[:,0]) + norm(self.M_CFD_w[:,1]) + norm(self.M_CFD_w[:,2])
+        #%% moments optimization        
+        def compute_K_moments(M_QSM_w, M_CFD_w):
+            K_moments = norm(M_QSM_w[:,0]-M_CFD_w[:,0]) + norm(M_QSM_w[:,1]-M_CFD_w[:,1]) + norm(M_QSM_w[:,2]-M_CFD_w[:,2])
+            K_moments_den = norm(M_CFD_w[:,0]) + norm(M_CFD_w[:,1]) + norm(M_CFD_w[:,2])
             # normalization
             if K_moments_den >= 1.0e-16:
-                K_moments /= K_moments_den
+                K_moments /= K_moments_den   
+                
+            return K_moments
 
+        # cost_moments is defined in terms of the moments. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM moments to their CFD counterparts
+        def cost_moments(x, self):
+            # compute moments (with current parameters)            
+            self.evaluate_moments(x, training=True)
+            # evaluate accuracy
+            K_moments = compute_K_moments( self.M_QSM_w, self.M_CFD_w )
             return K_moments
 
         # moment optimization
@@ -1436,96 +1366,49 @@ class QSM:
             bounds = [(-6, 6), (-6, 6)]
 
             start = time.time()
-            optimization = opt.minimize(cost_moments, args=(self, False), bounds=bounds, x0=x0_moments)
-            print('Completed in:', round(time.time() - start, 4), 'seconds')
+            optimization = opt.minimize(cost_moments, args=(self), bounds=bounds, x0=x0_moments)
+            if verbose:
+                print('Completed in:', round(time.time() - start, 4), 'seconds')
 
             self.x0_moments = optimization.x
             self.K_moments  = optimization.fun
 
-            print('x0_moments_optimized:', np.round(self.x0_moments, 5), '\nK_moments_optimized:', self.K_moments)
+            if verbose:
+                print('x0_moments_optimized:', np.round(self.x0_moments, 5))
+                
 
-        # save final value
-        self.K_moments = cost_moments(self.x0_moments, self, plot)
-
-        # compute QSM moment in global reference frame
-        self.M_QSM_g = apply_rotations_to_vectors(self.M_w2g, self.M_QSM_w)
+        # final evaluation
+        self.evaluate_moments(self.x0_moments, training=False)
+        # global approximation error (over all runs)
+        self.K_moments = compute_K_moments( self.M_QSM_w, self.M_CFD_w )
+        
+        if verbose:
+            print("K_moments= %2.2f" % (self.K_moments))
+        
+        # evaluate, for each run, the model quality (the local K_forces for each run)
+        for irun in range( self.nruns ):
+            i0 = irun*self.nt
+            jj = np.arange(start=i0, stop=i0+self.nt-1+1 )       
+            # error (K) for this CFD run:                         
+            self.K_moments_individual[irun] = compute_K_moments( self.M_QSM_w[jj], self.M_CFD_w[jj] )
         
 
-
-
-        #%% power optimization
-
-        #cost_power is defined in terms of the moments and power. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM power to its CFD counterpart
-        def cost_power(x, self, show_plots=False):
-            #here we define the the QSM moments as: M_QSM = [ C_lever_x_w_power*Fz_QSM_w, -C_lever_x_w_power*Fz_QSM_w, C_lever_x_w_power*Fy_QSM_w - C_lever_y_w_power*F_x_QSM_w ]
-            #where C_lever_x_w_power and C_lever_y_w_power correspond to the spanwise and the chordwise locations of the lever in the wing reference frame.
-            #vector form: C_lever_w = [C_lever_x_w_power, C_lever_y_w_power, 0]
-
-            C_lever_x_w_power = x[0]
-            C_lever_y_w_power = x[1]
-
-            self.Mx_QSM_w_power = np.zeros((self.nt,1))
-            self.My_QSM_w_power = np.zeros((self.nt,1))
-            self.Mz_QSM_w_power = np.zeros((self.nt,1))
-
-            self.P_QSM_nonoptimized = np.zeros((self.nt,1))
-            self.P_QSM = np.zeros((self.nt,1))
-
-            self.Mx_QSM_w_power =  C_lever_y_w_power*self.F_QSM_w[:, 2]
-            self.My_QSM_w_power = -C_lever_x_w_power*self.F_QSM_w[:, 2]
-            self.Mz_QSM_w_power =  C_lever_x_w_power*self.F_QSM_w[:, 1] - C_lever_y_w_power*self.F_QSM_w[:, 0]
-
-
-            self.P_QSM_nonoptimized = -(self.M_QSM_w[:,0]*self.rot_wing_w[:, 0]
-                                      + self.M_QSM_w[:,1]*self.rot_wing_w[:, 1]
-                                      + self.M_QSM_w[:,2]*self.rot_wing_w[:, 2])
-
-            self.P_QSM = -(self.Mx_QSM_w_power*self.rot_wing_w[:, 0]
-                         + self.My_QSM_w_power*self.rot_wing_w[:, 1]
-                         + self.Mz_QSM_w_power*self.rot_wing_w[:, 2])
-
-            K_power     = norm(self.P_QSM - self.P_CFD)
-            K_power_den = norm(self.P_CFD)
+        #%% power optimization        
+        def compute_K_power(P_QSM, P_CFD):
+            K_power     = norm(P_QSM - P_CFD)
+            K_power_den = norm(P_CFD)
             # normalization
             if K_power_den >= 1e-16:
                 K_power /= K_power_den
+                
+            return K_power
 
-            if show_plots:
-                ##FIGURE 4
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (15, 15))
-
-                #cfd vs qsm moments
-                ax1.plot(tt, self.M_QSM_w[:, 0], label='Mx_QSM_w', color='red')
-                ax1.plot(tt, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='-.', color='red')
-                ax1.plot(tt, self.M_QSM_w[:, 1], label='My_QSM_w', color='blue')
-                ax1.plot(tt, self.M_CFD_w[:, 1], label='My_CFD_w', ls='-.', color='blue')
-                ax1.plot(tt, self.M_QSM_w[:, 2], label='Mz_QSM_w', color='green')
-                ax1.plot(tt, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
-                ax1.set_xlabel('$t/T$')
-                ax1.set_ylabel('moment]')
-
-                if norm(self.M_CFD_g[:,0])>0 and norm(self.M_CFD_g[:,1])>0 and norm(self.M_CFD_g[:,2])>0:
-                    ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.M_QSM_w[:,0])/norm(self.M_CFD_g[:,0]),
-                                                                                norm(self.M_QSM_w[:,1])/norm(self.M_CFD_g[:,1]),
-                                                                                norm(self.M_QSM_w[:,2])/norm(self.M_CFD_g[:,2])) )
-                else:
-                    ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.M_QSM_w[:,0]), norm(self.M_QSM_w[:,1]), norm(self.M_QSM_w[:,2])) )
-                ax1.legend()
-
-                #optimized aerodynamic power
-                ax2.plot(tt, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
-                ax2.plot(tt, self.P_QSM, label='P_QSM (optimized)', color='b')
-                ax2.plot(tt, self.P_CFD, label='P_CFD', ls='-.', color='indigo')
-                ax2.set_xlabel('$t/T$')
-                ax2.set_ylabel('aerodynamic power')
-                ax2.set_title("P_QSM/P_CFD=%2.2f K_power=%3.3f" % (norm(self.P_QSM)/norm(self.P_CFD), K_power) )
-                ax2.legend()
-                plt.tight_layout()
-                plt.draw()
-
-                insect_tools.indicate_strokes(ax=ax1, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
-                insect_tools.indicate_strokes(ax=ax2, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
-
+        # cost_power is defined in terms of the moments and power. this function will be optimized to find the lever (coordinates) that best matches (match) the QSM power to its CFD counterpart
+        def cost_power(x, self):
+            # compute the power
+            self.evaluate_power(x, training=True)
+            # and evaluate its accuracy
+            K_power = compute_K_power(self.P_QSM, self.P_CFD)
             return K_power
 
         # power optimization
@@ -1534,18 +1417,34 @@ class QSM:
             bounds = [(-6, 6), (-6, 6)]
 
             start = time.time()
-            optimization = opt.minimize(cost_power, args=(self, False), bounds=bounds, x0=x0_power)
+            optimization = opt.minimize(cost_power, args=(self), bounds=bounds, x0=x0_power)
             self.x0_power = optimization.x
             self.K_power = optimization.fun
-            print('Completed in:', round(time.time() - start, 4), 'seconds')
+            
+            if verbose:
+                print('Completed in:', round(time.time() - start, 4), 'seconds')
+                print('x0_power:', np.round(self.x0_power, 5))
 
-            print('x0_power:', np.round(self.x0_power, 5), '\nK_power_optimized:', self.K_power)
+        # global approximation error (over all runs)
+        self.evaluate_power(self.x0_power, training=False)
+        self.K_power = compute_K_power(self.P_QSM, self.P_CFD)
+        
+        if verbose:
+            print("K_power= %2.2f" % (self.K_power))
+        
+        # evaluate, for each run, the model quality (the local K_forces for each run)
+        for irun in range( self.nruns ):
+            i0 = irun*self.nt
+            jj = np.arange(start=i0, stop=i0+self.nt-1+1 )       
+            # error (K) for this CFD run:                         
+            self.K_power_individual[irun] = compute_K_power( self.P_QSM[jj], self.P_CFD[jj] )
 
+        if plot:
+            self.plot_dynamics()
 
-        self.K_power = cost_power(self.x0_power, self, show_plots=plot)
 
         if verbose:
-            print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+            print('~~~~~~~~~~~~~~~Model training complete~~~~~~~~~~~~~~~~~~~~~')
 
 
     def setup_wing_shape(self, wingShape_file, verbose=True, i0=0, force_reload=False):
@@ -1595,7 +1494,8 @@ class QSM:
             reloading_required = True
                 
         if reloading_required:            
-            print('Evaluating wing shape file (may be slow but will be fast next time!)')
+            if verbose:
+                print('Evaluating wing shape file (may be slow but will be fast next time!)')
             dx, dy = 1e-3, 1e-3
             # 1st index: x, 2nd index: y
             X, Y, mask = insect_tools.get_wing_membrane_grid(wingShape_file, dx, dy, return_1D_list=False)
@@ -1603,7 +1503,8 @@ class QSM:
             np.savez(wingShape_file+'.npz', X=X, Y=Y, dx=dx, dy=dy, mask=mask, version=version)       
             
         else:            
-            print('Wing grid read from pre-computed *.npz file. (much faster!)')        
+            if verbose:
+                print('Wing grid read from pre-computed *.npz file. (much faster!)')        
             X, Y, mask, dx, dy = Q['X'], Q['Y'], Q['mask'], Q['dx'], Q['dy']            
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
          
@@ -1645,3 +1546,186 @@ class QSM:
 
         if any(np.isnan(self.S2)) or any(np.isnan(self.S1)) or any(np.isnan(self.S0)) or any(np.isnan(self.S_RC)) or any(np.isnan(self.S_RD)) or any(np.isnan(self.S_AM1)) or any(np.isnan(self.S_AM2)):
             raise ValueError("Wing shape setup has failed and computed NANs...")
+
+
+    def plot_kinematics(self):
+        ## FIGURE 1
+        fig, axes = plt.subplots(3, 2, figsize = (15, 15))
+
+        # angles
+        ax = axes[0,0]
+        ax.plot(self.timeline_all, np.degrees(self.phi), label='phi')
+        ax.plot(self.timeline_all, np.degrees(self.alpha), label ='alpha')
+        ax.plot(self.timeline_all, np.degrees(self.theta), label='theta')
+        ax.plot(self.timeline_all, np.degrees(self.AoA), label='AoA', color = 'purple')
+        ax.set_xlabel('t/T')
+        ax.set_ylabel('(deg)')
+        ax.legend()
+
+        # time derivatives of angles
+        ax = axes[0,1]
+        ax.plot(self.timeline_all, self.phi_dt, label='phi_dt')
+        ax.plot(self.timeline_all, self.alpha_dt, label='alpha_dt')
+        ax.plot(self.timeline_all, self.theta_dt, label='theta_dt')
+
+        if self.wing == "right" or self.wing == "right2" :
+            ax.plot(self.timeline_all, np.sign(-self.alpha), 'k--', label='sign(alpha)', linewidth=0.5 )
+        elif self.wing == "left" or self.wing == "left2" :
+            ax.plot(self.timeline_all, np.sign(+self.alpha), 'k--', label='sign(alpha)', linewidth=0.5 )
+        ax.set_xlabel('$t/T$')
+        ax.legend()
+
+        # u_wing_w (tip velocity in wing reference frame )
+        ax = axes[1,0]
+        
+        ax.plot(self.timeline_all, self.u_tip_w[:, 0], label='utip_w_x')
+        ax.plot(self.timeline_all, self.u_tip_w[:, 1], label='utip_w_y')
+        ax.plot(self.timeline_all, self.u_tip_w[:, 2], label='utip_w_z')
+        ax.plot(self.timeline_all, self.u_tip_mag, 'k--', label='utip_mag')
+
+        ax.set_xlabel('t/T')
+        ax.set_ylabel('[Rf]')
+        ax.set_title('Tip velocity magnitude in wing reference frame = %2.2f' % (np.mean(self.u_tip_mag)))
+        ax.legend()
+
+        #a_wing_w (tip acceleration in wing reference frame )
+        ax = axes[1,1]
+        ax.plot(self.timeline_all, self.a_tip_w[:, 0], label='$\\dot{u}_{\\mathrm{wing},x}^{(w)}$')
+        ax.plot(self.timeline_all, self.a_tip_w[:, 1], label='$\\dot{u}_{\\mathrm{wing},y}^{(w)}$')
+        ax.plot(self.timeline_all, self.a_tip_w[:, 2], label='$\\dot{u}_{\\mathrm{wing},z}^{(w)}$')
+        ax.set_xlabel('$t/T$')
+        ax.set_ylabel('$Rf^2$')
+        ax.set_title('Tip acceleration in wing reference frame')
+        ax.legend()
+
+        #rot_wing_w (tip velocity in wing reference frame )
+        ax = axes[2,0]
+        ax.plot(self.timeline_all, self.rot_wing_w[:, 0], label='$\\Omega_{\\mathrm{wing},x}^{(w)}$')
+        ax.plot(self.timeline_all, self.rot_wing_w[:, 1], label='$\\Omega_{\\mathrm{wing},y}^{(w)}$')
+        ax.plot(self.timeline_all, self.rot_wing_w[:, 2], label='$\\Omega_{\\mathrm{wing},z}^{(w)}$')
+        ax.set_xlabel('$t/T$')
+        ax.set_ylabel('rad/T')
+        ax.set_title('Angular velocity in wing reference frame')
+        ax.legend()
+
+        #rot_acc_wing_w (angular acceleration in wing reference frame )
+        ax = axes[2,1]
+        ax.plot(self.timeline_all, self.rot_acc_wing_w[:, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
+        ax.plot(self.timeline_all, self.rot_acc_wing_w[:, 1], label='$\\dot\\Omega_{\\mathrm{wing},y}^{(w)}$')
+        ax.plot(self.timeline_all, self.rot_acc_wing_w[:, 2], label='$\\dot\\Omega_{\\mathrm{wing},z}^{(w)}$')
+
+        ax.plot(self.timeline_all, np.sqrt(self.rot_acc_wing_w[:, 0]**2+self.rot_acc_wing_w[:, 1]**2+self.rot_acc_wing_w[:, 2]**2), 'k--', label='mag')
+        ax.set_xlabel('$t/T$')
+        ax.set_ylabel('[rad/T²]')
+        ax.set_title('Angular acceleration in wing reference frame')
+        ax.legend()
+
+        plt.suptitle('Kinematics data')
+
+        plt.tight_layout()
+        plt.draw()
+
+        for ax in axes.flatten():
+            insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
+            
+            
+    def plot_dynamics(self):
+
+        ##FIGURE 2
+        fig, axes = plt.subplots(2, 2, figsize = (15, 10))
+
+        #coefficients
+        graphAoA = np.linspace(-9, 90, 100)*(np.pi/180)
+        gCl, gCd, gCrot, gCam1, gCam2, gCrd, _, _,_,_, _,_,_  = self.unpack_parameters(self.x0_forces, graphAoA)
+        axes[0, 0].plot(np.degrees(graphAoA), gCl, label='Cl', color='#0F95F1')
+        axes[0, 0].plot(np.degrees(graphAoA), gCd, label='Cd', color='#F1AC0F')
+        axes[0, 0].set_title('Lift and drag coeffficients')
+        axes[0, 0].set_xlabel('AoA[°]')
+        axes[0, 0].set_ylabel('[-]')
+        axes[0, 0].legend(loc = 'upper right')
+
+        #vertical forces
+        axes[0, 1].plot(self.timeline_all, self.Ftc[:, 2], label = 'Vert. part of F_{TC} (Ellington1984 lift force)', color='gold')
+        axes[0, 1].plot(self.timeline_all, self.Ftd[:, 2], label = 'Vert. part of F_{TD} (Ellington1984 drag force)', color='lightgreen')
+        axes[0, 1].plot(self.timeline_all, self.Frc[:, 2], label = 'Vert. part of F_{RC}  (Sane2002, rotational force)', color='orange')
+        axes[0, 1].plot(self.timeline_all, self.Fam[:, 2], label = 'Vert. part of F_{AMz} (Whitney2010)', color='red')
+        axes[0, 1].plot(self.timeline_all, self.Fam2[:, 2], '--',label = 'Vert. part of F_{AMx} (vanVeen2022)', color='red')
+        axes[0, 1].plot(self.timeline_all, self.Frd[:, 2], label = 'Vert. part of F_{RD} (Cai2021, Nakata2015)', color='green')
+        axes[0, 1].plot(self.timeline_all, self.F_QSM_g[:,2], label = 'Total Vert. part of  QSM force', ls='-.', color='blue')
+        axes[0, 1].plot(self.timeline_all, self.F_CFD_g[:,2], label = 'Total Vert. part of  CFD force', ls='--', color='k')
+        axes[0, 1].set_xlabel('$t/T$')
+        axes[0, 1].set_ylabel('force')
+        axes[0, 1].set_title('Vertical components of forces in global coordinate system')
+        axes[0, 1].legend(loc = 'best')
+
+        #qsm + cfd force components in wing reference frame
+        axes[1, 0].plot(self.timeline_all, self.F_QSM_w[:, 0], label='Fx_QSM_w', c='r')
+        axes[1, 0].plot(self.timeline_all, self.F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
+        axes[1, 0].plot(self.timeline_all, self.F_QSM_w[:, 1], label='Fy_QSM_w', c='g')
+        axes[1, 0].plot(self.timeline_all, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
+        axes[1, 0].plot(self.timeline_all, self.F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
+        axes[1, 0].plot(self.timeline_all, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
+        axes[1, 0].set_xlabel('$t/T$')
+        axes[1, 0].set_ylabel('force')
+        axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
+        axes[1, 0].legend(loc='best')
+
+        #forces
+        axes[1, 1].plot(self.timeline_all, self.F_QSM_g[:,0], label='Fx_QSM_g', color='red')
+        axes[1, 1].plot(self.timeline_all, self.F_CFD_g[:,0], label='Fx_CFD_g', linestyle = 'dashed', color='red')
+        axes[1, 1].plot(self.timeline_all, self.F_QSM_g[:,1], label='Fy_QSM_g', color='green')
+        axes[1, 1].plot(self.timeline_all, self.F_CFD_g[:,1], label='Fy_CFD_g', linestyle = 'dashed', color='green')
+        axes[1, 1].plot(self.timeline_all, self.F_QSM_g[:,2], label='Fz_QSM_g', color='blue')
+        axes[1, 1].plot(self.timeline_all, self.F_CFD_g[:,2], label='Fz_CFD_g', linestyle = 'dashed', color='blue')
+        axes[1, 1].set_xlabel('$t/T$')
+        axes[1, 1].set_ylabel('force')
+        if norm(self.F_CFD_g[:,0]) > 0.0 and norm(self.F_CFD_g[:,1]) > 0.0 and norm(self.F_CFD_g[:,2]) > 0.0:
+            axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.2f" % (norm(self.F_QSM_g[:,0])/norm(self.F_CFD_g[:,0]),
+                                                                                norm(self.F_QSM_g[:,1])/norm(self.F_CFD_g[:,1]),
+                                                                                norm(self.F_QSM_g[:,2])/norm(self.F_CFD_g[:,2]),
+                                                                                self.K_forces) )
+        else:
+            axes[1, 1].set_title( "Fi_QSM_g/Fi_CFD_g=(%2.2f, %2.2f, %2.2f) \nK=%2.2f" % (norm(self.F_QSM_g[:,0]), norm(self.F_QSM_g[:,1]), norm(self.F_QSM_g[:,2]), self.K_forces) )
+        axes[1, 1].legend(loc = 'lower right')
+
+
+        for ax in axes.flatten()[1:]:
+            insect_tools.indicate_strokes(ax=ax, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
+
+        plt.tight_layout()
+        plt.draw()
+        
+        ##FIGURE 4
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (15, 15))
+
+        #cfd vs qsm moments
+        ax1.plot(self.timeline_all, self.M_QSM_w[:, 0], label='Mx_QSM_w', color='red')
+        ax1.plot(self.timeline_all, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='-.', color='red')
+        ax1.plot(self.timeline_all, self.M_QSM_w[:, 1], label='My_QSM_w', color='blue')
+        ax1.plot(self.timeline_all, self.M_CFD_w[:, 1], label='My_CFD_w', ls='-.', color='blue')
+        ax1.plot(self.timeline_all, self.M_QSM_w[:, 2], label='Mz_QSM_w', color='green')
+        ax1.plot(self.timeline_all, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
+        ax1.set_xlabel('$t/T$')
+        ax1.set_ylabel('moment]')
+
+        if norm(self.M_CFD_g[:,0])>0 and norm(self.M_CFD_g[:,1])>0 and norm(self.M_CFD_g[:,2])>0:
+            ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.M_QSM_w[:,0])/norm(self.M_CFD_g[:,0]),
+                                                                        norm(self.M_QSM_w[:,1])/norm(self.M_CFD_g[:,1]),
+                                                                        norm(self.M_QSM_w[:,2])/norm(self.M_CFD_g[:,2])) )
+        else:
+            ax1.set_title( "Mi_QSM_w/Mi_CFD_w=(%2.2f, %2.2f, %2.2f)" % (norm(self.M_QSM_w[:,0]), norm(self.M_QSM_w[:,1]), norm(self.M_QSM_w[:,2])) )
+        ax1.legend()
+
+        #optimized aerodynamic power
+        ax2.plot(self.timeline_all, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
+        ax2.plot(self.timeline_all, self.P_QSM, label='P_QSM (optimized)', color='b')
+        ax2.plot(self.timeline_all, self.P_CFD, label='P_CFD', ls='-.', color='indigo')
+        ax2.set_xlabel('$t/T$')
+        ax2.set_ylabel('aerodynamic power')
+        ax2.set_title("P_QSM/P_CFD=%2.2f K_power=%3.3f" % (norm(self.P_QSM)/norm(self.P_CFD), self.K_power) )
+        ax2.legend()
+        plt.tight_layout()
+        plt.draw()
+
+        insect_tools.indicate_strokes(ax=ax1, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )
+        insect_tools.indicate_strokes(ax=ax2, tstart=[self.T_reversals[0]], tstroke=2*(self.T_reversals[1]-self.T_reversals[0]) )

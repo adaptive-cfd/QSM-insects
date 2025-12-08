@@ -12,43 +12,69 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 import time
+import inifile_tools
+
 
 plt.close('all')
-run = '/home/engels/dev/WABBIT777/wavelet_influence/bumblebee/WABBIT_skew/fullTree-BB-medium_CDF62-JB-Bs18-signRef-skew-nodealias/'
 
-QSM = qsm_class.QSM(nt=400)
-QSM.setup_wing_shape(run+'none.ini')
-QSM.parse_kinematics(run+'PARAMS.ini', run+'kinematics.t', wing='left')
-QSM.read_CFD_data(run, run+"PARAMS.ini", T0=1.0)
-QSM.fit_to_CFD(optimize=True, plot=True)
-
-raise
-
-run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_4th/Drosophilidae/'
-
-QSM = qsm_class.QSM(nt=400)
-QSM.setup_wing_shape('none')
-QSM.setup_wing_shape(run+'WING_Chlorophilidae.ini')
-QSM.parse_kinematics(run+'PARAMS_diptera.ini', run+'kinematics.t', plot=True)
+# bumblebee data
+run  = 'example_CFD_data/'
+wing = 'example_CFD_data/bumblebee_wing_shape.ini'
 
 
-raise
+#%% A
+# create model, setup wing shape, read CFD data and train the QSM model
+
+model_terms = 5*[True]
+
+QSM = qsm_class.QSM(nt=300, model_CL_CD="Dickinson", model_terms=model_terms)
+
+QSM.setup_wing_shape(wing)
+
+QSM.parse_kinematics( inifile_tools.find_WABBIT_main_inifile(run), run+'kinematics.t', wing='right', plot=True)
+
+QSM.read_CFD_data(run, T0=1.0)
+
+QSM.fit_to_CFD(optimize=True, plot=True, N_trials=1)
 
 
-runs = glob.glob('/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_4th/*/')
-umax, names = [], []
-for run in runs:
-    if "CDF" in run or "RK" in run:
-        continue
-    plt.close('all')
-    # run = '/home/engels/Documents/Research/Insects/3D/projects/hoverfly_QSM_wageningen/diptera_project/simulations_4th/Chlorophilidae/'
-    
-    QSM = qsm_class.QSM(nt=400)
-    QSM.setup_wing_shape('none')
-    # QSM.setup_wing_shape(run+'WING_Chlorophilidae.ini')
-    QSM.parse_kinematics(run+'PARAMS_diptera.ini', run+'kinematics.t', plot=False)
-    # QSM.read_CFD_data(run, run+"PARAMS_diptera.ini", T0=2.0)
-    # QSM.fit_to_CFD(optimize=True, plot=True)
-    
-    umax.append(np.max(QSM.u_tip_mag))
-    names.append(run)
+#%%
+# Alternative to A
+
+QSM = qsm_class.QSM(nt=300, model_CL_CD="Dickinson", model_terms=model_terms)
+
+QSM.parse_many_run_directorys([run], T0=1.0)
+
+QSM.fit_to_CFD(optimize=True, plot=True, N_trials=1)
+
+
+#%% B
+# use model obtained above on different kinematics
+
+QSM_new = qsm_class.QSM(nt=300, model_CL_CD="Dickinson", model_terms=model_terms)
+
+# copy the solution of parameters to new QSM object:
+QSM_new.x0_forces = QSM.x0_forces
+QSM_new.x0_moments = QSM.x0_moments
+QSM_new.x0_power = QSM.x0_power
+
+# dont forget geometry factors:
+QSM_new.setup_wing_shape(wing)
+
+# create new kinematics
+_, alpha, phi, theta = insect_tools.bumblebee_kinematics_model(PHI=140, phi_m=0.0, alpha_down=45.0, alpha_up=-45.0,
+                                                                  time=QSM.timeline)
+# body angles:
+beta, gamma, psi, eta = QSM.beta, QSM.gamma, QSM.psi, QSM.eta
+
+QSM_new.parse_kinematics("example_CFD_data/PARAMS.ini", alpha=alpha, phi=phi, theta=theta, psi=psi, 
+                     eta_stroke=eta, gamma=gamma, beta=beta, u_infty_g=[1.246,0,0], wing="right", plot=True)
+
+
+QSM_new.evaluate_QSM_model(plot=False)
+
+
+plt.figure()
+plt.plot( QSM.timeline, QSM.F_QSM_g[:,2], label='QSM vertical force, reference configuration')
+plt.plot( QSM_new.timeline, QSM_new.F_QSM_g[:,2], label='QSM vertical force, modified kinematics (prediction)')
+plt.legend()
