@@ -85,12 +85,14 @@ class QSM:
         are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
         similar using the three models. 
     """
-    def __init__(self, nt=300, nruns=1, timeline=None, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip'):
+    def __init__(self, nt=300, nruns=1, timeline=None, model_CL_CD='Dickinson', 
+                 model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt"):
         
         
         self.AM_model = 'Full 6DOF scaled'
         self.model_terms = model_terms
         self.ellington_type = ellington_type
+        self.reversal_detector = reversal_detector
         
         self.nt = nt
         self.model_CL_CD = model_CL_CD
@@ -762,14 +764,31 @@ class QSM:
             # for left and right wing, the sign is inverted (hence using the array "sign", otherwise we'd just
             # flip the sign directly in e_lift_g)
             sign_liftvector *= -1.0
-
+            
+            
+        # def find_roots_vec(x, y):
+        #     # Indices where sign change occurs
+        #     idx = np.where(np.signbit(y[1:]) != np.signbit(y[:-1]))[0]        
+        #     # Linear interpolation for each root
+        #     roots = x[idx] - y[idx] * (x[idx+1] - x[idx]) / (y[idx+1] - y[idx])
+        #     return roots
+        
+        # ipeaks = find_roots_vec(self.timeline, self.phi_dt[ii])
+        # qty_to_use = self.phi_dt
+            
+        if self.reversal_detector == 'planar':
+            qty_to_use = self.planar_rot_wing_mag #self.u_tip_mag
+        elif self.reversal_detector == 'phi_dt':
+            qty_to_use = np.abs(self.phi_dt)
+        else:
+            raise ValueError("Unknown reversal detector method: "+self.reversal_detector)
+        
         # find minima in wingtip velocity magnitude. those, hopefully two, will be the reversals,
         # this is where the sign is flipped. We repeat the (periodic) signal to ensure we capture
         # peaks at t=0.0 and t=1.0. The distance between peaks is 3/4 * 1/2, so we think that the two half-strokes
         # occupy at most 3/8 and 5/8 of the complete cycle (maximum imbalance between up- and downstroke). This
         # filters out smaller peaks (in height) automatically, so we are left with the two most likely candidates.
-#ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.u_tip_mag[ii]] ), distance=3*self.nt/4/2)
-        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[self.planar_rot_wing_mag[ii]] ), distance=3*self.nt/4/2)
+        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[qty_to_use[ii]] ), distance=3*self.nt/4/2)
         ipeaks -= self.nt # shift (skip 1st periodic image)
         
         # keep only peaks in the original signal domain (remove periodic "ghosts")
@@ -781,13 +800,14 @@ class QSM:
         if len(ipeaks) != 2 :
             plt.figure()
     #plt.plot( np.hstack([self.timeline, self.timeline+1, self.timeline+2]), -1*np.hstack(  (3*[self.u_tip_mag[ii]]) ) )
-            plt.plot( np.hstack([self.timeline_all[ii], self.timeline_all[ii]+1, self.timeline_all[ii]+2]), -1*np.hstack(  (3*[self.planar_rot_wing_mag[ii]]) ) )
+            plt.plot( np.hstack([self.timeline_all[ii], self.timeline_all[ii]+1, self.timeline_all[ii]+2]), 
+                      np.hstack(  (3*[qty_to_use[ii]]) ) )
             plt.xlabel('timeline (repeated identical cycle 3 times)')
             plt.ylabel('u_tip_mag (wing=%s)' % (self.wing))
-            plt.plot( self.timeline[ipeaks]+0, -1*self.u_tip_mag[ipeaks], 'ro')
-            plt.plot( self.timeline[ipeaks]+1, -1*self.u_tip_mag[ipeaks], 'ro')
-            plt.plot( self.timeline[ipeaks]+2, -1*self.u_tip_mag[ipeaks], 'ro')
-            plt.title('Wing velocity minima detection: PROBLEM (more than 2 minima found)\n Note sign inversion (search max of negative-->min)')
+            plt.plot( self.timeline[ipeaks]+0, qty_to_use[ipeaks], 'ro')
+            plt.plot( self.timeline[ipeaks]+1, qty_to_use[ipeaks], 'ro')
+            plt.plot( self.timeline[ipeaks]+2, qty_to_use[ipeaks], 'ro')
+            plt.title('Wing velocity minima detection: PROBLEM (more than 2 minima found)')
 
             insect_tools.indicate_strokes(tstroke=2.0)
             print(ii)
@@ -1219,7 +1239,7 @@ class QSM:
 
 
 
-    def fit_to_CFD(self, optimize=True, plot=True, N_trials=3, verbose=True):
+    def fit_to_CFD(self, optimize=True, plot=True, N_trials=1, verbose=True):
         """
         Train the QSM model with one/many CFD run(s). 
         ------------------
