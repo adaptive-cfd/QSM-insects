@@ -20,8 +20,11 @@ import finite_differences
 # plt.rcParams["text.usetex"] = True
 
 latex = plt.rcParams["text.usetex"]
-
 deg2rad = np.pi/180.0
+
+
+
+
 
 def norm(x):
     return( np.linalg.norm(x.flatten()) )
@@ -67,6 +70,8 @@ def apply_rotations_to_vectors(M, x):
 
 
 class QSM:
+    
+  
     """
     QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
     
@@ -89,9 +94,9 @@ class QSM:
                  model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt"):
         
         
-        self.AM_model = 'Full 6DOF scaled'
-        self.model_terms = model_terms
-        self.ellington_type = ellington_type
+        self.AM_model          = 'Full 6DOF scaled'
+        self.model_terms       = model_terms
+        self.ellington_type    = ellington_type
         self.reversal_detector = reversal_detector
         
         self.nt = nt
@@ -391,8 +396,6 @@ class QSM:
             
             plt.savefig( fname_out, dpi=dpi )
             
-    def read_kinematics(self, params_file, kinematics_file='kinematics.t'):
-        print('hi')
 
     def parse_kinematics(self, params_file, kinematics_file=None, u_infty_g=None, plot=True, wing='auto', yawpitchroll0=None, eta_stroke=None, i0=0,
                          alpha=None, phi=None, theta=None, psi=None, beta=None, gamma=None, verbose=True, optimized_loading=True, T0=0.0):
@@ -975,8 +978,8 @@ class QSM:
 
     def evaluate_QSM_model(self, plot=False):
         """
-        This function is a wrapper for FIT_TO_CFD. It evaluates the QSM model with a given set of
-        previously determined coefficients. You need to parse kinematics data before you can call this
+        This function evaluates the QSM model with a given set of previously determined coefficients. 
+        These coefficients are stored in self.x0_forces You need to parse kinematics data before you can call this
         function.
         """
         # first the forces - otherwise we cannot compute the moments
@@ -999,7 +1002,7 @@ class QSM:
 
         rho = 1.0 # for future work, can also be set to 1.0 simply
        
-        if np.max(self.S2-1.0) < 1.0e-10:
+        if np.max(np.abs(self.S2-1.0)) < 1.0e-10:
             import warnings
             warnings.warn("""We try to evaluate the QSM model, but the S2 (shape function) seems to be
                              all ones. Probably you did not setup the wing shape before evaluating the model,
@@ -1467,7 +1470,7 @@ class QSM:
             print('~~~~~~~~~~~~~~~Model training complete~~~~~~~~~~~~~~~~~~~~~')
 
 
-    def setup_wing_shape(self, wingShape_file, verbose=True, i0=0, force_reload=False):
+    def setup_wing_shape(self, wingShapeFile, verbose=True, i0=0, force_reload=False):
         """
         Specifiy the wing shape (here, in the form of the wing contour).
         Note the code can run without this information, as the influence of
@@ -1477,13 +1480,13 @@ class QSM:
         Shape data is read from an INI file.
         """
         if verbose:
-            print('Parsing wing contour: '+wingShape_file)
+            print('Parsing wing contour: '+wingShapeFile)
 
-        if os.path.isfile(wingShape_file):
-            xc, yc, area = insect_tools.wing_contour_from_file( wingShape_file )
+        if os.path.isfile(wingShapeFile):
+            xc, yc, area = insect_tools.wing_contour_from_file( wingShapeFile )
             zc = np.zeros_like(xc)
         else:
-            raise ValueError("Wing shape file %s not found!" % (wingShape_file))
+            raise ValueError("Wing shape file %s not found!" % (wingShapeFile))
         
         
         nt = self.nt
@@ -1499,11 +1502,11 @@ class QSM:
         version_file = 0
         
         reloading_required = False
-        if not os.path.isfile(wingShape_file+'.npz') and not force_reload:
+        if not os.path.isfile(wingShapeFile+'.npz') and not force_reload:
             reloading_required = True
         
-        if os.path.isfile(wingShape_file+'.npz'):
-            Q = np.load(wingShape_file+'.npz')
+        if os.path.isfile(wingShapeFile+'.npz'):
+            Q = np.load(wingShapeFile+'.npz')
             
             if 'version' in Q.keys():
                 version_file = Q['version']
@@ -1518,9 +1521,9 @@ class QSM:
                 print('Evaluating wing shape file (may be slow but will be fast next time!)')
             dx, dy = 1e-3, 1e-3
             # 1st index: x, 2nd index: y
-            X, Y, mask = insect_tools.get_wing_membrane_grid(wingShape_file, dx, dy, return_1D_list=False)
+            X, Y, mask = insect_tools.get_wing_membrane_grid(wingShapeFile, dx, dy, return_1D_list=False)
             
-            np.savez(wingShape_file+'.npz', X=X, Y=Y, dx=dx, dy=dy, mask=mask, version=version)       
+            np.savez(wingShapeFile+'.npz', X=X, Y=Y, dx=dx, dy=dy, mask=mask, version=version)       
             
         else:            
             if verbose:
