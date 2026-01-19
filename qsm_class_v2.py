@@ -211,6 +211,7 @@ class QSM:
             # if no wing shape file is given, figure out which one was used
             wingShapeFile = wt.get_ini_parameter( PARAMS , 'Insects', 'WingShape', str, 'none')[0]
             wingShapeFile = run_directory + wingShapeFile.replace('from_file::','')
+            print(wingShapeFile)
         
         if not os.path.isfile(wingShapeFile):
             raise ValueError("""We try to initialize the wing shape for run (%s), and identified %s as the WingShape file.
@@ -1048,7 +1049,7 @@ class QSM:
             Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
         
         else:
-            raise ValueError("The CL/CD model must be either Dickinson or Nakata, not: "+self.model_CL_CD)
+            raise ValueError("The CL/CD model must be either Dickinson/Nakata/Polhamus, not: "+self.model_CL_CD)
 
         Crot = x0[4]
         Crd  = x0[5]        
@@ -1151,7 +1152,7 @@ class QSM:
                 if not self.model_terms[2]:
                     x0_forces[5] = np.nan
                 if not self.model_terms[3]:
-                    x0_forces[ [5,6,7,8,9,10,11] ] = np.nan
+                    x0_forces[ [6,7,8,9,10,11] ] = np.nan
                 if not self.model_terms[4]:
                     x0_forces[ [12,13] ] = np.nan   
 
@@ -1272,7 +1273,7 @@ class QSM:
 
 
         if verbose:
-            print('\Optimized coefficients:')
+            print('\nOptimized coefficients:')
             print('x0_forces  :', np.round(self.x0_forces, 5))
             print('x0_moments :', np.round(self.x0_moments, 5))
             print('x0_power   :', np.round(self.x0_power, 5))
@@ -1715,3 +1716,4 @@ def copyQSMcoefficients(QSM1, QSM2):
     QSM2.model_terms = QSM1.model_terms
     QSM2.model_CL_CD = QSM1.model_CL_CD
     QSM2.reversal_detector = QSM1.reversal_detector
+    QSM2.AM_model = QSM1.AM_model
