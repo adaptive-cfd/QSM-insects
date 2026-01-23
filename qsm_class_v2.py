@@ -27,6 +27,42 @@ deg2rad = np.pi/180.0
 
 
 class QSM:   
+    """
+    QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
+    
+    Initialization Parameters
+    ------------
+    model_CL_CD :
+        The Ellington terms (lift and drag) require evaluation of CL and CD as a function of AoA, for this a function is needed. Implemented models
+        are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
+        similar using the three models. 
+        
+    model_terms : 
+        A list of 5 bools to turn on and off individual terms in the QSM model. The terms are: 
+            [Ellington1984 (lift/drag: TC/TD), 
+             Sane2002 (rotation TC),
+             Whitney2010 (rotational drag RD),
+             AddedMass Normal,
+             AddedMass Tangential
+             ]
+    
+    """
+    
+    def __init__(self, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt"):
+
+      
+        self.AM_model          = 'Full 6DOF scaled'
+        self.model_terms       = model_terms
+        self.ellington_type    = ellington_type
+        self.reversal_detector = reversal_detector
+        self.model_CL_CD       = model_CL_CD
+        
+        self.x0_forces = np.zeros((14))
+        self.x0_moments = np.zeros((2))
+        self.x0_power = np.zeros((2))
+        
+        # initialize empty data arrays:
+        self.deleteData_keepCoefficients()
     
     def deleteData_keepCoefficients( self ):
         """
@@ -144,7 +180,8 @@ class QSM:
         data to the data already stored in the QSM model (except for the first call when there is no data yet in the QSM).
         
         If you want to use a manually defined kinematics, use the function "append_KinematicsShape" instead, as 
-        it provides more flexibility.
+        it provides more flexibility. This is the case for a prediction: you train the model using existing data, and
+        use it to predict the forces produced by new kinematics (and that you probably do not have CFD data on.)
         
         Reading the kinematics is done using the CFD run's `kinematics.t` file, where the code logs
         the kinematics that were used in the run. We read the three angles describing the wing, the body angles,
@@ -152,7 +189,8 @@ class QSM:
             
         We read the data between T_start and T_end with a temporal resolution of dt. This may be more than one cycle
         (which, probably, only makes sense with a non-periodic wingbeat in the simulation). It may also be an incomplete 
-        cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) )
+        cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) ). The most often used case is that
+        the data cover one stroke, e.g. [1.0, 2.0).
         
         We try to determine whether the CFD deals with the left or the right wing, and adjust the kinematics
         accordingly. Should the CFD include both wings, an error is thrown is you pass wing='auto', and you need to
@@ -162,7 +200,7 @@ class QSM:
         directory. In case you explicitly provide a wingShapeFile, that one is used.
         
         Derived kinematics data (like angular velocities, etc.) are computed directly in this routine; you do 
-        not need to take care of that. We just need the angles as a function of time.
+        not need to take care of that. We just need the angles as a function of time.´
         """
         
 
@@ -276,7 +314,7 @@ class QSM:
         self.F_CFD_g = np.vstack( (self.F_CFD_g, forces_CFD[:,1:3+1]) ) # hstack for scalars, vstack for vectors (annoying)
         self.M_CFD_g = np.vstack( (self.M_CFD_g, moments_CFD[:,1:3+1]) )
                 
-        # obtain CFD data in wing reference frame (only last nt time steps)
+        # obtain CFD data in wing reference frame (only last nt time steps, those are the ones we read right now)
         self.M_CFD_w = np.vstack( (self.M_CFD_w, apply_rotations_to_vectors(self.M_g2w[-nt:,:,:], self.M_CFD_g[-nt:,:]) ) )
         self.F_CFD_w = np.vstack( (self.F_CFD_w, apply_rotations_to_vectors(self.M_g2w[-nt:,:,:], self.F_CFD_g[-nt:,:]) ) )
         
@@ -315,15 +353,15 @@ class QSM:
         
         Two ways to append kinematics here:
             
-            1/ You provide an INI file for the wingbeat, from which we read alpha, phi and theta (kinematics_file != None)
+            1/ You provide an *.INI file for the wingbeat, from which we read alpha, phi and theta (kinematics_file != None)
             
             2/ You manually provide the angles alpha, phi, theta (kinematics_file == None) 
             
         In both cases, you have to provide information about the body: its velocity (u_body) and its angles 
-        (beta_pitch, psi_roll, gamma_yaw) and the stroke plane angle (eta). The values for the body attitude
-        can be constants: for the angles, you can pass a single value, for the velocity an array of length 3. You can
-        also pass the angles as arrays of the same length as the time vector: in that case, the body attitude 
-        may vary over time.
+        (beta_pitch, psi_roll, gamma_yaw) and the stroke plane angle (eta). Those are not included in a wingbeat
+        kinematics file. The values for the body attitude can be constants: for the angles, you can pass a 
+        single value, for the velocity an array of length 3. You can also pass the angles as arrays 
+        of the same length as the time vector: in that case, the body attitude may vary over time.
         
         """
         
@@ -331,7 +369,7 @@ class QSM:
         dt = t[1]-t[0]
         
         #---------------------------------------------------------------------
-        # pre-process input
+        # pre-process input data
         #---------------------------------------------------------------------
         if unit_in=='deg':
             factor_conversion = np.pi/180
@@ -339,9 +377,9 @@ class QSM:
             factor_conversion = 1.0
       
         # ensure data in rad and as array
-        eta   = np.asarray(eta) * factor_conversion
-        psi   = np.asarray(psi) * factor_conversion
-        beta  = np.asarray(beta) * factor_conversion
+        eta   = np.asarray(eta)   * factor_conversion
+        psi   = np.asarray(psi)   * factor_conversion
+        beta  = np.asarray(beta)  * factor_conversion
         gamma = np.asarray(gamma) * factor_conversion
         
         # if a single value is passed, convert to nt vector 
@@ -409,6 +447,9 @@ class QSM:
         QSM model specific to that shape, and it should not be used with other wing shapes.
     
         Shape data is read from an INI file.
+        
+        This function is not intended for users of the QSM code, indicated by the leading
+        two underscores (__) - it is mainly for internal use of the code.
         """
         if verbose:
             print('Parsing wing contour: '+wingShapeFile)
@@ -494,12 +535,29 @@ class QSM:
         # for Added mass:
         self.S_AM1 = np.hstack( (self.S_AM1, np.sum( r*C**2 )*dy * one) )
         self.S_AM2 = np.hstack( (self.S_AM2, np.sum( xh *  C**2 )*dy * one) )
+        
+        if verbose:
+            print(' Wing geometry factors:')
+            print(' S2    = %+e' % (self.S2[-1]))
+            print(' S1    = %+e' % (self.S1[-1]))
+            print(' S0    = %+e' % (self.S0[-1]))
+            print(' S_RC  = %+e' % (self.S_RC[-1]))
+            print(' S_RD  = %+e' % (self.S_RD[-1]))
+            print(' S_AM1 = %+e' % (self.S_AM1[-1]))
+            print(' S_AM2 = %+e' % (self.S_AM2[-1]))
     
         if any(np.isnan(self.S2)) or any(np.isnan(self.S1)) or any(np.isnan(self.S0)) or any(np.isnan(self.S_RC)) or any(np.isnan(self.S_RD)) or any(np.isnan(self.S_AM1)) or any(np.isnan(self.S_AM2)):
             raise ValueError("Wing shape setup has failed and computed NANs...")
 
      
     def __append_parse_kinematics(self, alpha, phi, theta, alpha_dt, phi_dt, theta_dt, psi, beta, gamma, eta, u_infty_g, side, dt, timeline):
+        """
+        Parse kinematics: given the wing angles and their time derivatives, as well as body attitude, 
+        compute derived kinematics qyts for modeling: angular velocities, etc. 
+        
+        This function is not intended for users of the QSM code, indicated by the leading
+        two underscores (__) - it is mainly for internal use of the code.
+        """
         
         assert alpha.shape == phi.shape == theta.shape == alpha_dt.shape == phi_dt.shape == theta_dt.shape == timeline.shape
         assert psi.shape == beta.shape == gamma.shape == timeline.shape == eta.shape
@@ -748,32 +806,7 @@ class QSM:
         self.T1_cycle = np.hstack( (self.T1_cycle, t[-1]) )
     
 
-    def __init__(self, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt"):
-        """
-        QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
-        
-        Initialization Parameters
-        ------------
-        model_CL_CD :
-            The Ellington terms (lift and drag) require evaluation of CL and CD as a function of AoA, for this a function is needed. Implemented models
-            are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
-            similar using the three models. 
-        model_terms: a list of 5 bools to turn on and off individual terms in the QSM model
-        
-        """
-      
-        self.AM_model          = 'Full 6DOF scaled'
-        self.model_terms       = model_terms
-        self.ellington_type    = ellington_type
-        self.reversal_detector = reversal_detector
-        self.model_CL_CD       = model_CL_CD
-        
-        self.x0_forces = np.zeros((14))
-        self.x0_moments = np.zeros((2))
-        self.x0_power = np.zeros((2))
-        
-        # initialize empty data arrays:
-        self.deleteData_keepCoefficients()
+
 
     def evalQSM_all(self, plot=False):
         """
@@ -1028,6 +1061,10 @@ class QSM:
         
         
     def __unpack_parameters(self, x0, AoA=None):
+        """
+        This function is not intended for users of the QSM code, indicated by the leading
+        two underscores (__) - it is mainly for internal use of the code.
+        """
         deg2rad = np.pi/180.0
         rad2deg = 180.0/np.pi
         
@@ -1065,7 +1102,7 @@ class QSM:
 
 
 
-    def fit_to_CFD(self, optimize=True, N_trials=1, verbose=True):
+    def fit_to_CFD(self, N_trials=1, verbose=True):
         """
         Train the QSM model with one/many CFD run(s). 
         ------------------
@@ -1082,8 +1119,6 @@ class QSM:
 
         model_terms: [use_ellington_liftdrag, use_sane_rotforce, use_rotationalDrag, use_addedmass_normal, use_addedmass_tangential]
 
-        optimize: if True, we train the QSM model with previously read CFD data.
-                  if False, this function evaluates the model with the parsed kinematics, with given QSM model coefficients
         """
         
         if verbose:
@@ -1127,46 +1162,45 @@ class QSM:
         #----------------------------------------------------------------------
         # TRAINING: find optimal set of coefficients
         #----------------------------------------------------------------------
-        if optimize:
-            # as a means of informing the user that they need to read CFD data before fitting (training):
-            if self.F_CFD_g.shape[0] == 0:
-                raise ValueError("You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
+        # as a means of informing the user that they need to read CFD data before fitting (training):
+        if self.F_CFD_g.shape[0] == 0:
+            raise ValueError("You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
 
-            start = time.time()
-            bounds = 14*[(-1000, 1000)]
-            K_forces = 9e9
+        start = time.time()
+        bounds = 14*[(-1000, 1000)]
+        K_forces = 9e9
 
-            # optimize N_trials times from a different initial guess, use best solution found
-            # NOTE: tests indicate the system always finds the same solution, so this could
-            # be omitted. Kept for safety - we do less likely get stuck in local minima this way
-            for i_trial in range(N_trials):
-                x0_forces    = np.random.rand(14)
-                optimization = opt.minimize(cost_forces, args=(self), bounds=bounds, x0=x0_forces)
-                x0_forces    = optimization.x
-                
-                # for readability, remove unused coefficients
-                if not self.model_terms[0]:
-                    x0_forces[0:3+1] = np.nan
-                if not self.model_terms[1]:
-                    x0_forces[4] = np.nan
-                if not self.model_terms[2]:
-                    x0_forces[5] = np.nan
-                if not self.model_terms[3]:
-                    x0_forces[ [6,7,8,9,10,11] ] = np.nan
-                if not self.model_terms[4]:
-                    x0_forces[ [12,13] ] = np.nan   
+        # optimize N_trials times from a different initial guess, use best solution found
+        # NOTE: tests indicate the system always finds the same solution, so this could
+        # be omitted. Kept for safety - we do less likely get stuck in local minima this way
+        for i_trial in range(N_trials):
+            x0_forces    = np.random.rand(14)
+            optimization = opt.minimize(cost_forces, args=(self), bounds=bounds, x0=x0_forces)
+            x0_forces    = optimization.x
+            
+            # for readability, remove unused coefficients
+            if not self.model_terms[0]:
+                x0_forces[0:3+1] = np.nan
+            if not self.model_terms[1]:
+                x0_forces[4] = np.nan
+            if not self.model_terms[2]:
+                x0_forces[5] = np.nan
+            if not self.model_terms[3]:
+                x0_forces[ [6,7,8,9,10,11] ] = np.nan
+            if not self.model_terms[4]:
+                x0_forces[ [12,13] ] = np.nan   
 
-                if optimization.fun < K_forces:
-                    K_forces = optimization.fun
-                    x0_best = x0_forces
-                if verbose:
-                    print( 'Trial %i/%i K=%2.3f N_evals=%i \nx0=' % (i_trial+1, N_trials, optimization.fun, optimization.nfev), np.round(x0_forces, 3))
-
-            self.x0_forces = x0_best
-            self.K_forces  = K_forces
-
+            if optimization.fun < K_forces:
+                K_forces = optimization.fun
+                x0_best = x0_forces
             if verbose:
-                print('Completed in:', round(time.time() - start, 4), 'seconds')
+                print( 'Trial %i/%i K=%2.3f N_evals=%i \nx0=' % (i_trial+1, N_trials, optimization.fun, optimization.nfev), np.round(x0_forces, 3))
+
+        self.x0_forces = x0_best
+        self.K_forces  = K_forces
+
+        if verbose:
+            print('Completed in:', round(time.time() - start, 4), 'seconds')
         
         # final evaluation (called even without optimization)
         # global fit quality
@@ -1202,17 +1236,16 @@ class QSM:
             return K_moments
 
         # moment optimization
-        if optimize:
-            x0_moments = [1.0, 1.0]
-            bounds = [(-6, 6), (-6, 6)]
+        x0_moments = [1.0, 1.0]
+        bounds = [(-6, 6), (-6, 6)]
 
-            start = time.time()
-            optimization = opt.minimize(cost_moments, args=(self), bounds=bounds, x0=x0_moments)
-            if verbose:
-                print('Completed in:', round(time.time() - start, 4), 'seconds')
+        start = time.time()
+        optimization = opt.minimize(cost_moments, args=(self), bounds=bounds, x0=x0_moments)
+        if verbose:
+            print('Completed in:', round(time.time() - start, 4), 'seconds')
 
-            self.x0_moments = optimization.x
-            self.K_moments  = optimization.fun
+        self.x0_moments = optimization.x
+        self.K_moments  = optimization.fun
 
         # final evaluation
         self.evalQSM_moments(self.x0_moments, training=False)
@@ -1246,17 +1279,16 @@ class QSM:
             return K_power
 
         # power optimization
-        if optimize:
-            x0_power = [1.0, 1.0]
-            bounds = [(-6, 6), (-6, 6)]
+        x0_power = [1.0, 1.0]
+        bounds = [(-6, 6), (-6, 6)]
 
-            start = time.time()
-            optimization = opt.minimize(cost_power, args=(self), bounds=bounds, x0=x0_power)
-            self.x0_power = optimization.x
-            self.K_power = optimization.fun
-            
-            if verbose:
-                print('Completed in:', round(time.time() - start, 4), 'seconds')
+        start = time.time()
+        optimization = opt.minimize(cost_power, args=(self), bounds=bounds, x0=x0_power)
+        self.x0_power = optimization.x
+        self.K_power = optimization.fun
+        
+        if verbose:
+            print('Completed in:', round(time.time() - start, 4), 'seconds')
 
         # global approximation error (over all runs)
         self.evalQSM_power(self.x0_power, training=False)
@@ -1443,11 +1475,11 @@ class QSM:
 
         #cfd vs qsm moments
         ax1.plot(self.timeline, self.M_QSM_w[:, 0], label='Mx_QSM_w', color='red')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='-.', color='red')
+        ax1.plot(self.timeline, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='--', color='red')
         ax1.plot(self.timeline, self.M_QSM_w[:, 1], label='My_QSM_w', color='blue')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='-.', color='blue')
+        ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='--', color='blue')
         ax1.plot(self.timeline, self.M_QSM_w[:, 2], label='Mz_QSM_w', color='green')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='-.', color='green')
+        ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='--', color='green')
         ax1.set_xlabel('$t/T$')
         ax1.set_ylabel('moment]')
 
@@ -1460,9 +1492,9 @@ class QSM:
         ax1.legend()
 
         #optimized aerodynamic power
-        ax2.plot(self.timeline, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
-        ax2.plot(self.timeline, self.P_QSM, label='P_QSM (optimized)', color='b')
-        ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='indigo')
+        # ax2.plot(self.timeline, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
+        ax2.plot(self.timeline, self.P_QSM, label='P_QSM')
+        ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='k')
         ax2.set_xlabel('$t/T$')
         ax2.set_ylabel('aerodynamic power')
         ax2.set_title("P_QSM/P_CFD=%2.2f K_power=%3.3f" % (norm(self.P_QSM)/norm(self.P_CFD), self.K_power) )
@@ -1564,7 +1596,8 @@ class QSM:
         
         
 
-    def plot3D_allFrames(self, fnames_out="visualization3D", directory='./', dark_plot=False, dpi=200):
+    def plot3D_allFrames(self, fnames_out="visualization3D", directory='./', dark_plot=False, dpi=200,
+                         savePNG=True, continuous=False):
         """
         Creates one PNG file per time step, loops over the entire time vector
         """
@@ -1573,17 +1606,24 @@ class QSM:
             plt.style.use('dark_background')
 
         # can be called only after parse_kinematics
-        plt.figure()
+        fig = plt.figure()
         ax = plt.figure().add_subplot(projection='3d')
+        it = 0
+        
 
-        for it in range(self.nt):
+        for it in range(self.timeline.shape[0]):
             ax.cla()
             self.plot3D_singleFrame(it, ax)
-            plt.show()
+            
+            plt.show()            
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+            
             fname_out = directory + '/' + fnames_out+'.%04i.png' % (it)
             print('Animation 3D visualization saving: ' + fname_out)
             
-            plt.savefig( fname_out, dpi=dpi )
+            if savePNG:
+                plt.savefig( fname_out, dpi=dpi )
                 
         
 
