@@ -106,6 +106,10 @@ class QSM:
         self.ez_wing_g = np.zeros(vector)
         self.ex_wing_g = np.zeros(vector)
         
+        self.ey_body_g = np.zeros(vector)
+        self.ez_body_g = np.zeros(vector)
+        self.ex_body_g = np.zeros(vector)
+        
         self.M_g2b = np.zeros(matrix)
         self.M_b2g = np.zeros(matrix)        
         self.M_g2w = np.zeros(matrix)
@@ -377,6 +381,7 @@ class QSM:
             factor_conversion = 1.0
       
         # ensure data in rad and as array
+        # NOTE: do not use *= (modifies input data!!)
         eta   = np.asarray(eta)   * factor_conversion
         psi   = np.asarray(psi)   * factor_conversion
         beta  = np.asarray(beta)  * factor_conversion
@@ -412,9 +417,10 @@ class QSM:
                 raise ValueError("You passed kinematics_file=None but did not provide all of phi, theta and alpha.")
                 
             # ensure data in rad
-            alpha *= factor_conversion
-            phi   *= factor_conversion
-            theta *= factor_conversion
+            # NOTE: do not use *= (modifies input data!!)
+            alpha = alpha * factor_conversion
+            phi   = phi * factor_conversion
+            theta = theta * factor_conversion
             
         assert alpha.shape == phi.shape == theta.shape == t.shape
         assert eta.shape == beta.shape == gamma.shape == psi.shape == t.shape
@@ -665,6 +671,17 @@ class QSM:
         self.ex_wing_g = np.vstack( (self.ex_wing_g, ex_wing_g))
         self.ey_wing_g = np.vstack( (self.ey_wing_g, ey_wing_g))
         self.ez_wing_g = np.vstack( (self.ez_wing_g, ez_wing_g))
+        
+        # body unit vectors
+        ex_body_g = apply_rotations_to_vectors( M_b2g, np.matlib.repmat( np.asarray([1,0,0]), nt, 1))
+        ey_body_g = apply_rotations_to_vectors( M_b2g, np.matlib.repmat( np.asarray([0,1,0]), nt, 1))
+        ez_body_g = apply_rotations_to_vectors( M_b2g, np.matlib.repmat( np.asarray([0,0,1]), nt, 1))
+        
+        self.ex_body_g = np.vstack( (self.ex_body_g, ex_body_g))
+        self.ey_body_g = np.vstack( (self.ey_body_g, ey_body_g))
+        self.ez_body_g = np.vstack( (self.ez_body_g, ez_body_g))
+
+        
 
         # wing tip velocity
         u_tip_g = np.cross(rot_wing_g, ey_wing_g) + u_infty_g
@@ -1581,6 +1598,14 @@ class QSM:
                   W=[self.e_lift_g[it,2],self.e_drag_g[it,2]],
                   arrow_length_ratio=0.15, label='lift \& drag unit vectors', color='m')
         
+        # ax.plot( [0, self.ex_body_g[it,0]], [0, self.ex_body_g[it,1]], [0, self.ex_body_g[it,2]], 'k-.')
+        # ax.plot( [0, self.ex_body_g[it,0]], [a, a], [0, self.ex_body_g[it,2]], 'k-.')
+        
+        ax.quiver( X=[0.0, 0.0, 0.0], Y=[0.0, 0.0, 0.0], Z=[0.0, 0.0, 0.0], 
+                  U=[self.ex_body_g[it,0],self.ey_body_g[it,0],self.ez_body_g[it,0]], 
+                  V=[self.ex_body_g[it,1],self.ey_body_g[it,1],self.ez_body_g[it,1]], 
+                  W=[self.ex_body_g[it,2],self.ey_body_g[it,2],self.ez_body_g[it,2]],
+                  arrow_length_ratio=0.15, label='body reference frame', color='k', lw=0.25)
 
         #set the axis limits
         ax.set_xlim([-a, a])
