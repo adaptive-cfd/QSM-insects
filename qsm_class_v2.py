@@ -252,7 +252,7 @@ class QSM:
         if wingShapeFile is None:
             # if no wing shape file is given, figure out which one was used
             wingShapeFile = wt.get_ini_parameter( PARAMS , 'Insects', 'WingShape', str, 'none')[0]
-            wingShapeFile = run_directory + wingShapeFile.replace('from_file::','')
+            wingShapeFile = run_directory + '/' + wingShapeFile.replace('from_file::','')
             print(wingShapeFile)
         
         if not os.path.isfile(wingShapeFile):
@@ -1774,7 +1774,12 @@ def optimized_t_loader( file, time, optimized_loading=True, verbose=False ):
     return data
 
 def copyQSMcoefficients(QSM1, QSM2):
-    """ copy QSM coefficients from QSM1 to QSM2 """
+    """ Copy QSM coefficients from QSM1 to QSM2. 
+    
+    This also copies other important settings:
+    model_terms, model_CL_CD, reversal_detector, AM_model.
+    
+    """
     QSM2.x0_forces  = QSM1.x0_forces
     QSM2.x0_moments = QSM1.x0_moments
     QSM2.x0_power   = QSM1.x0_power
