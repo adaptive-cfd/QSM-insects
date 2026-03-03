@@ -1338,7 +1338,7 @@ class QSM:
 
     def plot2D_kinematics(self):
         ## FIGURE 1
-        fig, axes = plt.subplots(3, 2, figsize = (15, 15))
+        fig, axes = plt.subplots(3, 3, figsize = (15, 15))
 
         # angles
         ax = axes[0,0]
@@ -1362,6 +1362,12 @@ class QSM:
             ax.plot(self.timeline, np.sign(+self.alpha), 'k--', label='sign(alpha)', linewidth=0.5 )
         ax.set_xlabel('$t/T$')
         ax.legend()
+        
+        ax = axes[2,2]
+        self.plot2D_lollipop_diagram(ax=ax)
+        ax.set_title('Lollipop diagram')
+        
+        
 
         # u_wing_w (tip velocity in wing reference frame )
         ax = axes[1,0]
@@ -1413,7 +1419,7 @@ class QSM:
         plt.tight_layout()
         plt.draw()
 
-        for ax in axes.flatten():
+        for ax in axes.flatten()[:-1]:
             # shaded background
             ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
                 where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
@@ -1649,7 +1655,152 @@ class QSM:
             
             if savePNG:
                 plt.savefig( fname_out, dpi=dpi )
+
+    def plot2D_lollipop_diagram( self, ax=None, DrawPath=True, PathColor='k', chord_length=0.1, N_lollipops=40, cmap=None, draw_stoke_plane=True):
+        """
+        Lollipop-diagram. 
+        
+        This type of diagram shows a "wing section", a line with dot for the leading edge. This is called a lollipop.
+        The visualization takes place in the sagittal plane (index _m for midplane, because _s is already taken for stroke plane).
+        It would be more natural to draw this diagram in the body coordinate system, but that's not the convention. The sagittal
+        plane is the body reference frame with an additional rotation by -mean(beta), where beta is pitch angle.
+        
+        You should use this diagram only if you are looking at a single wingbeat, because it will otherwise be confusing
+    
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib
+    
+        wing = self.wing
                 
+        if ax is None:
+            ax = plt.gca()            
+
+        for irun in np.arange(np.max(self.dataID)):
+            ii = ( self.dataID == irun )
+            
+            # this diagram would be most convenient in the body coordinate system,
+            # but that is not the convention. The convention is the sagittal plane, looking from the 
+            # side at the insect, i.e. you can see the pitch angle. However as this is arbitrary, it
+            # seems to be more logical to me to use the mean pitch angle for that, rather than the
+            # instantaneous one. In most cases, this is the same, as beta is often constant.
+            beta_sagittal = np.mean(self.beta[ii])
+        
+            # In the Lollipop diagram, we look at the insect from the side. The pitch angle
+            # is visible, but yaw and roll are not (otherwise the fig is distorted and very 
+            # difficult to interpret). This translates to an additional rotation around y 
+            # by -beta, after going to the body system.
+            # Index _m because _s is stroke plane.
+            M_b2sagittal = insect_tools.Ry(-1.0*beta_sagittal)
+                
+            # read kinematics data:
+            time  = np.linspace(0.0, 1.0, num=N_lollipops, endpoint=False)
+            t2    = self.timeline[ii]
+            t2   -= t2[0]
+            phi   = np.interp(time, t2, self.phi[ii])
+            alpha = np.interp(time, t2, self.alpha[ii])
+            theta = np.interp(time, t2, self.theta[ii])        
+            eta   = np.interp(time, t2, self.eta[ii]) # note how eta is time-independent but still used as a (constant) array
+            # psi   = np.interp(time, t2, self.psi[ii])
+            # beta  = np.interp(time, t2, self.beta[ii])
+            # gamma = np.interp(time, t2, self.gamma[ii])
+                            
+            # wing tip in wing coordinate system
+            x_tip_w   = np.asarray([0.0, 1.0, 0.0])
+            x_le_w    = np.asarray([ 0.5*chord_length,1.0,0.0])
+            x_te_w    = np.asarray([-0.5*chord_length,1.0,0.0])
+        
+            # array of color (note normalization to 1 for query values)
+            if cmap is None:
+                cmap = plt.cm.jet
+            if type(cmap) == matplotlib.colors.LinearSegmentedColormap:
+                colors = cmap( (np.arange(time.size) / time.size) )
+            else:
+                # if its a constant color, jus create a list of colors
+                colors = time.size*[cmap]
+    
+        
+            # step 1: draw the symbols for the wing section for some time steps
+            for i in range(time.size):        
+                # (true) body transformation matrix
+                # M_g2b = insect_tools.get_M_g2b(psi[i], beta[i], gamma[i], unit_in='rad')
+                    
+                # rotation matrix (body -> wing)
+                M_b2w = insect_tools.get_M_b2w(alpha[i], theta[i], phi[i], eta[i], wing, unit_in='rad')
+        
+                # convert wing points to sagittal coordinate system
+                x_tip_m =  M_b2sagittal @ ( np.transpose(M_b2w) @ x_tip_w ) 
+                x_le_m  =  M_b2sagittal @ ( np.transpose(M_b2w) @ x_le_w ) 
+                x_te_m  =  M_b2sagittal @ ( np.transpose(M_b2w) @ x_te_w )
+        
+                # the wing chord changes in length, as the wing moves and is oriented differently
+                # note if the wing is perpendicular, it is invisible
+                # so this vector goes from leading to trailing edge:
+                e_chord = x_te_m - x_le_m
+                e_chord[1] = 0.0
+                
+                # normalize it to have the right length
+                e_chord = e_chord / (np.linalg.norm(e_chord))
+                
+                # pseudo TE and LE. note this is not true TE and LE as the line length changes otherwise
+                x_le_m = x_tip_m - e_chord * chord_length/2.0
+                x_te_m = x_tip_m + e_chord * chord_length/2.0
+        
+                # draw actual lollipop
+                # mark leading edge with a marker
+                ax.plot( x_le_m[0], x_le_m[2], marker='o', color=colors[i], markersize=4 )
+                # draw wing chord
+                ax.plot( [x_te_m[0], x_le_m[0]], [x_te_m[2], x_le_m[2]], '-', color=colors[i])
+                
+                
+        
+            # step 2: draw the path of the wingtip
+            if DrawPath:
+                # refined time vector for drawing the wingtip path
+                time  = np.linspace(0.0, 1.0, num=200, endpoint=False)
+                t2    = self.timeline[ii]
+                t2   -= t2[0]
+                phi   = np.interp(time, t2, self.phi[ii])
+                alpha = np.interp(time, t2, self.alpha[ii])
+                theta = np.interp(time, t2, self.theta[ii])        
+                eta   = np.interp(time, t2, self.eta[ii]) # note how eta is time-independent but still used as a (constant) array
+               
+                xpath, zpath = np.zeros_like(time), np.zeros_like(time)
+        
+                for i in range(time.size):
+                    # rotation matrix from body to wing coordinate system 
+                    M_b2w = insect_tools.get_M_b2w(alpha[i], theta[i], phi[i], eta[i], wing, unit_in='rad')
+                    # convert wing points to sagittal coordinate system
+                    x_tip_m = M_b2sagittal @ np.transpose(M_b2w) @ x_tip_w
+        
+                    xpath[i] = x_tip_m[0]
+                    zpath[i] = x_tip_m[2]
+                ax.plot( xpath, zpath, linestyle='--', color=PathColor, linewidth=1.0 )
+        
+        
+            # Draw stroke plane as a dashed line
+            # NOTE: if beta is not constant, there should be more lines...
+            if draw_stoke_plane:
+                M_b2s = insect_tools.get_M_b2s( eta[0], wing, unit_in='rad')
+                
+                # we draw the line between [0,0,-1] and [0,0,1] in the stroke system        
+                x1_s = np.asarray([0.0, 0.0, +1.0])
+                x2_s = np.asarray([0.0, 0.0, -1.0])
+                
+                # bring these points back to the global system
+                x1_m = M_b2sagittal @ ( np.transpose(M_b2s) @ x1_s )
+                x2_m = M_b2sagittal @ ( np.transpose(M_b2s) @ x2_s )       
+            
+                # remember we're in the x-z plane
+                ax.plot( [x1_m[0],x2_m[0]], [x1_m[2],x2_m[2]], color='k', linewidth=1.0, linestyle='--')
+        
+        ax.set_yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+        ax.set_xticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+        ax.set_xlabel('x_{sagittal}/R')
+        ax.set_ylabel('z_{sagittal}/R')
+        
+        insect_tools.axis_equal_keepbox(plt.gcf(), ax)
+        
         
 
 def norm(x):
@@ -1787,3 +1938,5 @@ def copyQSMcoefficients(QSM1, QSM2):
     QSM2.model_CL_CD = QSM1.model_CL_CD
     QSM2.reversal_detector = QSM1.reversal_detector
     QSM2.AM_model = QSM1.AM_model
+
+
