@@ -1676,7 +1676,7 @@ class QSM:
         if ax is None:
             ax = plt.gca()            
 
-        for irun in np.arange(np.max(self.dataID)):
+        for irun in np.arange(np.max(self.dataID)+1):
             ii = ( self.dataID == irun )
             
             # this diagram would be most convenient in the body coordinate system,
