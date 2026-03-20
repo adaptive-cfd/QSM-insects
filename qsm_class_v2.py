@@ -503,6 +503,10 @@ class QSM:
                 print('Wing grid read from pre-computed *.npz file. (much faster!)')        
             X, Y, mask, dx, dy = Q['X'], Q['Y'], Q['mask'], Q['dx'], Q['dy']            
         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        
+        self.x_wingmembrane = X
+        self.y_wingmembrane = Y
+        self.m_wingmembrane = mask
          
         # chord array (size ny):
         C = np.sum(mask, axis=0)*dx
@@ -1101,6 +1105,10 @@ class QSM:
             # see J-S Han et al Bioinspr Biomim 12 2017 036004
             Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
             Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
+        elif self.model_CL_CD == 'Whitney':
+            # whitney $ wood eqn 2.20
+            Cl   = x0[0]*np.sin( 2.0*AoA )
+            Cd   = (x0[1]+x0[2])/2 - ((x0[1]-x0[2])/2) * np.cos( 2.0*AoA )
         
         else:
             raise ValueError("The CL/CD model must be either Dickinson/Nakata/Polhamus, not: "+self.model_CL_CD)
@@ -1349,6 +1357,9 @@ class QSM:
         ax.set_xlabel('t/T')
         ax.set_ylabel('(deg)')
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
 
         # time derivatives of angles
         ax = axes[0,1]
@@ -1362,13 +1373,11 @@ class QSM:
             ax.plot(self.timeline, np.sign(+self.alpha), 'k--', label='sign(alpha)', linewidth=0.5 )
         ax.set_xlabel('$t/T$')
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
         
-        ax = axes[2,2]
-        self.plot2D_lollipop_diagram(ax=ax)
-        ax.set_title('Lollipop diagram')
         
-        
-
         # u_wing_w (tip velocity in wing reference frame )
         ax = axes[1,0]
         
@@ -1381,6 +1390,9 @@ class QSM:
         ax.set_ylabel('[Rf]')
         ax.set_title('Tip velocity magnitude in wing reference frame = %2.2f' % (np.mean(self.u_tip_mag)))
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
 
         #a_wing_w (tip acceleration in wing reference frame )
         ax = axes[1,1]
@@ -1391,6 +1403,9 @@ class QSM:
         ax.set_ylabel('$Rf^2$')
         ax.set_title('Tip acceleration in wing reference frame')
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
 
         #rot_wing_w (tip velocity in wing reference frame )
         ax = axes[2,0]
@@ -1401,29 +1416,45 @@ class QSM:
         ax.set_ylabel('rad/T')
         ax.set_title('Angular velocity in wing reference frame')
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
 
         #rot_acc_wing_w (angular acceleration in wing reference frame )
         ax = axes[2,1]
         ax.plot(self.timeline, self.rot_acc_wing_w[:, 0], label='$\\dot\\Omega_{\\mathrm{wing},x}^{(w)}$')
         ax.plot(self.timeline, self.rot_acc_wing_w[:, 1], label='$\\dot\\Omega_{\\mathrm{wing},y}^{(w)}$')
         ax.plot(self.timeline, self.rot_acc_wing_w[:, 2], label='$\\dot\\Omega_{\\mathrm{wing},z}^{(w)}$')
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
 
         ax.plot(self.timeline, np.sqrt(self.rot_acc_wing_w[:, 0]**2+self.rot_acc_wing_w[:, 1]**2+self.rot_acc_wing_w[:, 2]**2), 'k--', label='mag')
         ax.set_xlabel('$t/T$')
         ax.set_ylabel('[rad/T²]')
         ax.set_title('Angular acceleration in wing reference frame')
         ax.legend()
+        # shaded background
+        ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
+            where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
+        
+        # lollipop diagram
+        ax = axes[2,2]
+        self.plot2D_lollipop_diagram(ax=ax)
+        ax.set_title('Lollipop diagram')
+        
+        # wing shape
+        ax = axes[1,2]        
+        ax.pcolormesh(self.x_wingmembrane, self.y_wingmembrane, self.m_wingmembrane)
+        ax.plot( self.x_wingContour_w[:,0], self.x_wingContour_w[:,1], color='w' )
+        insect_tools.axis_equal_keepbox(fig=fig, ax=ax)
 
         plt.suptitle('Kinematics data')
 
         plt.tight_layout()
         plt.draw()
-
-        for ax in axes.flatten()[:-1]:
-            # shaded background
-            ax.fill_between( self.timeline, ax.get_ylim()[0], ax.get_ylim()[1],
-                where=(self.sign_liftvector[:,0] < 0), color=[0.85, 0.85, 0.85, 1.0], step="post" )
             
+        
             
     def plot2D_dynamics(self):
 
