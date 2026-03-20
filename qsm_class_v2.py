@@ -1445,8 +1445,8 @@ class QSM:
         
         # wing shape
         ax = axes[1,2]        
-        ax.pcolormesh(self.x_wingmembrane, self.y_wingmembrane, self.m_wingmembrane)
-        ax.plot( self.x_wingContour_w[:,0], self.x_wingContour_w[:,1], color='w' )
+        ax.contourf(self.x_wingmembrane, self.y_wingmembrane, self.m_wingmembrane, levels=[0.5, 1.0], colors=[insect_tools.change_color_opacity('r', 0.10)] )
+        ax.plot( self.x_wingContour_w[:,0], self.x_wingContour_w[:,1], color='r' )
         insect_tools.axis_equal_keepbox(fig=fig, ax=ax)
 
         plt.suptitle('Kinematics data')
