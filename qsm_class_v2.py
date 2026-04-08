@@ -48,7 +48,7 @@ class QSM:
     
     """
     
-    def __init__(self, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt"):
+    def __init__(self, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt", rho=1.0):
 
       
         self.AM_model          = 'Full 6DOF scaled'
@@ -61,8 +61,14 @@ class QSM:
         self.x0_moments = np.zeros((2))
         self.x0_power = np.zeros((2))
         
+        self.K_forces = np.nan
+        self.K_moments = np.nan
+        self.K_power = np.nan
+        
         # initialize empty data arrays:
         self.deleteData_keepCoefficients()
+        
+        self.rho = rho
     
     def deleteData_keepCoefficients( self ):
         """
@@ -853,7 +859,7 @@ class QSM:
         # unpack coefficients from parameter vector
         Cl, Cd, Crot, Crd, Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8 = self.__unpack_parameters(x0)
 
-        rho = 1.0 # for future work, can also be set to 1.0 simply
+        rho = self.rho
        
         if np.max(np.abs(self.S2-1.0)) < 1.0e-10:
             import warnings
@@ -1440,7 +1446,7 @@ class QSM:
         
         # lollipop diagram
         ax = axes[2,2]
-        self.plot2D_lollipop_diagram(ax=ax)
+        self.plot2D_lollipop_diagram(ax=ax, mode='sagittal')
         ax.set_title('Lollipop diagram')
         
         # wing shape
@@ -1470,6 +1476,11 @@ class QSM:
         axes[0, 0].set_xlabel('AoA[°]')
         axes[0, 0].set_ylabel('[-]')
         axes[0, 0].legend(loc = 'upper right')
+        
+        plotCFD=True
+        # if no CFD data has been read into this QSM object, we cannot plot it.
+        if self.F_CFD_g.shape[0] != self.timeline.shape[0]:
+            plotCFD=False
 
         #vertical forces
         axes[0, 1].plot(self.timeline, self.Ftc[:, 2], label = 'Vert. part of F_{TC} (Ellington1984 lift force)')
@@ -1479,7 +1490,8 @@ class QSM:
         axes[0, 1].plot(self.timeline, self.Fam2[:, 2], '--',label = 'Vert. part of F_{AMx} (vanVeen2022)')
         axes[0, 1].plot(self.timeline, self.Frd[:, 2], label = 'Vert. part of F_{RD} (Cai2021, Nakata2015)')
         axes[0, 1].plot(self.timeline, self.F_QSM_g[:,2], label = 'Total Vert. part of  QSM force', ls='-', color='k')
-        axes[0, 1].plot(self.timeline, self.F_CFD_g[:,2], label = 'Total Vert. part of  CFD force', ls='--', color='k')
+        if plotCFD:
+            axes[0, 1].plot(self.timeline, self.F_CFD_g[:,2], label = 'Total Vert. part of  CFD force', ls='--', color='k')
         axes[0, 1].set_xlabel('$t/T$')
         axes[0, 1].set_ylabel('force')
         axes[0, 1].set_title('Vertical components of forces in global coordinate system')
@@ -1487,11 +1499,14 @@ class QSM:
 
         #qsm + cfd force components in wing reference frame
         axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 0], label='Fx_QSM_w', c='r')
-        axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
         axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 1], label='Fy_QSM_w', c='g')
-        axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
         axes[1, 0].plot(self.timeline, self.F_QSM_w[:, 2], label='Fz_QSM_w', c='b')
-        axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
+        
+        if plotCFD:
+            axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 0], ls='-.', label='Fx_CFD_w', c='r')
+            axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 1], ls='-.', label='Fy_CFD_w', c='g')
+            axes[1, 0].plot(self.timeline, self.F_CFD_w[:, 2], ls='-.', label='Fz_CFD_w', c='b')
+            
         axes[1, 0].set_xlabel('$t/T$')
         axes[1, 0].set_ylabel('force')
         axes[1, 0].set_title('QSM + CFD force components in wing reference frame')
@@ -1499,11 +1514,14 @@ class QSM:
 
         #forces
         axes[1, 1].plot(self.timeline, self.F_QSM_g[:,0], label='Fx_QSM_g', color='red')
-        axes[1, 1].plot(self.timeline, self.F_CFD_g[:,0], label='Fx_CFD_g', linestyle = 'dashed', color='red')
         axes[1, 1].plot(self.timeline, self.F_QSM_g[:,1], label='Fy_QSM_g', color='green')
-        axes[1, 1].plot(self.timeline, self.F_CFD_g[:,1], label='Fy_CFD_g', linestyle = 'dashed', color='green')
         axes[1, 1].plot(self.timeline, self.F_QSM_g[:,2], label='Fz_QSM_g', color='blue')
-        axes[1, 1].plot(self.timeline, self.F_CFD_g[:,2], label='Fz_CFD_g', linestyle = 'dashed', color='blue')
+
+        if plotCFD:
+            axes[1, 1].plot(self.timeline, self.F_CFD_g[:,0], label='Fx_CFD_g', linestyle = 'dashed', color='red')
+            axes[1, 1].plot(self.timeline, self.F_CFD_g[:,1], label='Fy_CFD_g', linestyle = 'dashed', color='green')
+            axes[1, 1].plot(self.timeline, self.F_CFD_g[:,2], label='Fz_CFD_g', linestyle = 'dashed', color='blue')
+            
         axes[1, 1].set_xlabel('$t/T$')
         axes[1, 1].set_ylabel('force')
         if norm(self.F_CFD_g[:,0]) > 0.0 and norm(self.F_CFD_g[:,1]) > 0.0 and norm(self.F_CFD_g[:,2]) > 0.0:
@@ -1529,11 +1547,14 @@ class QSM:
 
         #cfd vs qsm moments
         ax1.plot(self.timeline, self.M_QSM_w[:, 0], label='Mx_QSM_w', color='red')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='--', color='red')
-        ax1.plot(self.timeline, self.M_QSM_w[:, 1], label='My_QSM_w', color='blue')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='--', color='blue')
+        ax1.plot(self.timeline, self.M_QSM_w[:, 1], label='My_QSM_w', color='blue')        
         ax1.plot(self.timeline, self.M_QSM_w[:, 2], label='Mz_QSM_w', color='green')
-        ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='--', color='green')
+        
+        if plotCFD:
+            ax1.plot(self.timeline, self.M_CFD_w[:, 0], label='Mx_CFD_w', ls='--', color='red')
+            ax1.plot(self.timeline, self.M_CFD_w[:, 1], label='My_CFD_w', ls='--', color='blue')
+            ax1.plot(self.timeline, self.M_CFD_w[:, 2], label='Mz_CFD_w', ls='--', color='green')
+        
         ax1.set_xlabel('$t/T$')
         ax1.set_ylabel('moment]')
 
@@ -1548,7 +1569,8 @@ class QSM:
         #optimized aerodynamic power
         # ax2.plot(self.timeline, self.P_QSM_nonoptimized, label='P_QSM (non-optimized)', c='purple')
         ax2.plot(self.timeline, self.P_QSM, label='P_QSM')
-        ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='k')
+        if plotCFD:
+            ax2.plot(self.timeline, self.P_CFD, label='P_CFD', ls='-.', color='k')
         ax2.set_xlabel('$t/T$')
         ax2.set_ylabel('aerodynamic power')
         ax2.set_title("P_QSM/P_CFD=%2.2f K_power=%3.3f" % (norm(self.P_QSM)/norm(self.P_CFD), self.K_power) )
@@ -1687,7 +1709,7 @@ class QSM:
             if savePNG:
                 plt.savefig( fname_out, dpi=dpi )
 
-    def plot2D_lollipop_diagram( self, ax=None, DrawPath=True, PathColor='k', chord_length=0.1, N_lollipops=40, cmap=None, draw_stoke_plane=True):
+    def plot2D_lollipop_diagram( self, ax=None, DrawPath=True, PathColor='k', chord_length=0.1, N_lollipops=40, cmap=None, draw_stoke_plane=True, mode='sagittal'):
         """
         Lollipop-diagram. 
         
@@ -1703,6 +1725,9 @@ class QSM:
         import matplotlib
     
         wing = self.wing
+        
+        if mode != 'sagittal' and mode != 'body':
+            raise ValueError("Mode needs to be either sagittal or body")
                 
         if ax is None:
             ax = plt.gca()            
@@ -1722,7 +1747,10 @@ class QSM:
             # difficult to interpret). This translates to an additional rotation around y 
             # by -beta, after going to the body system.
             # Index _m because _s is stroke plane.
-            M_b2sagittal = insect_tools.Ry(-1.0*beta_sagittal)
+            if mode == "sagittal":
+                M_b2sagittal = insect_tools.Ry(-1.0*beta_sagittal)
+            elif mode == 'body':
+                M_b2sagittal = insect_tools.Ry(0.0)
                 
             # read kinematics data:
             time  = np.linspace(0.0, 1.0, num=N_lollipops, endpoint=False)
@@ -1732,9 +1760,10 @@ class QSM:
             alpha = np.interp(time, t2, self.alpha[ii])
             theta = np.interp(time, t2, self.theta[ii])        
             eta   = np.interp(time, t2, self.eta[ii]) # note how eta is time-independent but still used as a (constant) array
-            # psi   = np.interp(time, t2, self.psi[ii])
-            # beta  = np.interp(time, t2, self.beta[ii])
-            # gamma = np.interp(time, t2, self.gamma[ii])
+            # if mode == 'body':
+            #     psi   = np.interp(time, t2, self.psi[ii])
+            #     beta  = np.interp(time, t2, self.beta[ii])
+            #     gamma = np.interp(time, t2, self.gamma[ii])
                             
             # wing tip in wing coordinate system
             x_tip_w   = np.asarray([0.0, 1.0, 0.0])
@@ -1750,11 +1779,14 @@ class QSM:
                 # if its a constant color, jus create a list of colors
                 colors = time.size*[cmap]
     
+            colors = time.size*[plt.cm.jet( float(irun)/float((np.max(self.dataID)+1)) )]
+            # print()
         
             # step 1: draw the symbols for the wing section for some time steps
             for i in range(time.size):        
                 # (true) body transformation matrix
-                # M_g2b = insect_tools.get_M_g2b(psi[i], beta[i], gamma[i], unit_in='rad')
+                # if mode == 'body':
+                #     M_g2b = insect_tools.get_M_g2b(psi[i], beta[i], gamma[i], unit_in='rad')
                     
                 # rotation matrix (body -> wing)
                 M_b2w = insect_tools.get_M_b2w(alpha[i], theta[i], phi[i], eta[i], wing, unit_in='rad')
@@ -1968,6 +2000,7 @@ def copyQSMcoefficients(QSM1, QSM2):
     QSM2.model_terms = QSM1.model_terms
     QSM2.model_CL_CD = QSM1.model_CL_CD
     QSM2.reversal_detector = QSM1.reversal_detector
+    QSM2.ellington_type = QSM1.ellington_type
     QSM2.AM_model = QSM1.AM_model
 
 
