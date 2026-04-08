@@ -22,33 +22,34 @@ import datetime
 
 latex = plt.rcParams["text.usetex"]
 deg2rad = np.pi/180.0
+rad2deg = 1.0/deg2rad
 
 
 
 
 class QSM:   
-    """
-    QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
-    
-    Initialization Parameters
-    ------------
-    model_CL_CD :
-        The Ellington terms (lift and drag) require evaluation of CL and CD as a function of AoA, for this a function is needed. Implemented models
-        are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
-        similar using the three models. 
-        
-    model_terms : 
-        A list of 5 bools to turn on and off individual terms in the QSM model. The terms are: 
-            [Ellington1984 (lift/drag: TC/TD), 
-             Sane2002 (rotation TC),
-             Whitney2010 (rotational drag RD),
-             AddedMass Normal,
-             AddedMass Tangential
-             ]
-    
-    """
-    
+
     def __init__(self, model_CL_CD='Dickinson', model_terms=5*[True], ellington_type='utip', reversal_detector="phi_dt", rho=1.0):
+        """
+        QSM object. The QSM describes one wing, so for a dragonfly for example you'll have four of these objects.
+        
+        Initialization Parameters
+        ------------
+        model_CL_CD :
+            The Ellington terms (lift and drag) require evaluation of CL and CD as a function of AoA, for this a function is needed. Implemented models
+            are "Nakata" [Nakata2015], "Dickinson" [Dickinson1999] and 'Polhamus' [J-S Han et al Bioinspr Biomim 12 2017 036004]. The results are in general rather
+            similar using the three models. 
+            
+        model_terms : 
+            A list of 5 bools to turn on and off individual terms in the QSM model. The terms are: 
+                [Ellington1984 (lift/drag: TC/TD), 
+                 Sane2002 (rotation TC),
+                 Whitney2010 (rotational drag RD),
+                 AddedMass Normal,
+                 AddedMass Tangential
+                 ]
+        
+        """
 
       
         self.AM_model          = 'Full 6DOF scaled'
@@ -181,7 +182,8 @@ class QSM:
         self.sign_liftvector = np.zeros(vector)
         
     def append_KinematicsShapeForces_fromCFDrun( self, run_directory, T_start, T_end, dt, wingShapeFile=None, 
-                                                 wing='auto', verbose=True, optimized_loading=True ):
+                                                 wing='auto', verbose=True, optimized_loading=True,
+                                                 nonperiodic_kinematics=False):
         """
         From an existing CFD simulation, read in the kinematics, wingshape and forces.
         
@@ -197,10 +199,13 @@ class QSM:
         the kinematics that were used in the run. We read the three angles describing the wing, the body angles,
         body velocity, etc.
             
-        We read the data between T_start and T_end with a temporal resolution of dt. This may be more than one cycle
-        (which, probably, only makes sense with a non-periodic wingbeat in the simulation). It may also be an incomplete 
-        cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) ). The most often used case is that
-        the data cover one stroke, e.g. [1.0, 2.0).
+        We read the data between T_start and T_end with a temporal resolution of dt. This may be more than one cycle, 
+        which only makes sense with a non-periodic wingbeat in the simulation: `nonperiodic_kinematics=True`.  
+        Otherwise, we expect on cycle or less: it may also be an incomplete cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) ). 
+        The most often used case is that the data cover one stroke, e.g. [1.0, 2.0).
+                                                                          
+        If nonperiodic_kinematics=True, you can pass the entire interval of interest covering several cycles.
+        The QSM code will try to figure out the different wingbeat cycles.
         
         We try to determine whether the CFD deals with the left or the right wing, and adjust the kinematics
         accordingly. Should the CFD include both wings, an error is thrown is you pass wing='auto', and you need to
@@ -210,14 +215,22 @@ class QSM:
         directory. In case you explicitly provide a wingShapeFile, that one is used.
         
         Derived kinematics data (like angular velocities, etc.) are computed directly in this routine; you do 
-        not need to take care of that. We just need the angles as a function of time.´
-        """
+        not need to take care of that. We just need the angles as a function of time.
+
+        *nonperiodic_kinematics*:
+            
+            If set, the code will identify up- and downstrokes over the given period of time. I.e., you can
+            call this routine with data concerning more than one wingbeat cycle (say T=[1.0, 20.0]) and
+            it will identify the different cycles. Attention, the cycle duration will no longer be 1.0, of course.
+            
+            Futhermore, for reversal detection, we use the roots of phi_dt, regardless of what is specified as `reversal_detector`
         
+
+        """        
 
         # timeline to read
         t  = np.arange(T_start, T_end, dt)
-        nt = t.shape[0]
-        
+        nt = t.shape[0]        
         
         #---------------------------------------------------------------------
         # find settings in the CFDs main parameter file
@@ -309,24 +322,59 @@ class QSM:
         gamma = kinematics_CFD[:, 6].copy() # rad
         eta   = kinematics_CFD[:, 7].copy() # rad
         
-        # ready to parse (compute angular velocities, unit vectors, etc)
-        self.__append_parse_kinematics( alpha=alpha, phi=phi, theta=theta, alpha_dt=alpha_dt, phi_dt=phi_dt, 
-                                       theta_dt=theta_dt, psi=psi, beta=beta, gamma=gamma, eta=eta, 
-                                       u_infty_g=u_infty_g, side=wing.replace('2',''), dt=dt, timeline=t)
-
-
-        #---------------------------------------------------------------------
-        # read forces, moments
-        #---------------------------------------------------------------------        
+        # read CFD forces, moments
         forces_CFD  = optimized_t_loader(run_directory+'/forces_'+suffix+'.t', time=t, verbose=verbose, optimized_loading=True)
         moments_CFD = optimized_t_loader(run_directory+'/moments_'+suffix+'.t', time=t, verbose=verbose, optimized_loading=True)
+        
+        # ready to parse (compute angular velocities, unit vectors, etc)
+        if nonperiodic_kinematics == False:
+            self.__append_parse_kinematics( alpha=alpha, phi=phi, theta=theta, alpha_dt=alpha_dt, phi_dt=phi_dt, 
+                                           theta_dt=theta_dt, psi=psi, beta=beta, gamma=gamma, eta=eta, 
+                                           u_infty_g=u_infty_g, side=wing.replace('2',''), dt=dt, timeline=t)
+            # append CFD forces and moments
+            self.F_CFD_g = np.vstack( (self.F_CFD_g, forces_CFD[:,1:3+1]) ) # hstack for scalars, vstack for vectors (annoying)
+            self.M_CFD_g = np.vstack( (self.M_CFD_g, moments_CFD[:,1:3+1]) )
+            
+            #---------------------------------------------------------------------
+            # wing shape
+            #---------------------------------------------------------------------        
+            self.__append_wing_shape(nt, wingShapeFile, verbose=verbose)
+                    
+        else:
+            # Step1: decide on cycles
+            roots = find_roots_discrete(phi_dt)
+            
+            # for non-periodic kinematics, it is well possible that the first cycle is incomplete
+            # a b c a b c a b ...
+            Nroots  = len(roots)
+            Ncycles = np.floor( Nroots / 3.0 )            
+            roots   = roots[0:3*int(Ncycles)+1]
+            
+            # add the cycles we found
+            for a in np.arange(start=0, stop=len(roots)-2, step=2):
+                # j1: start of 1st half cycle
+                # j2: change of half cycles 
+                # j3: end of 2nd half cycle (=beginning of next 1st cycle)
+                j1, j2, j3 = roots[a], roots[a+1], roots[a+2]
                 
-        self.F_CFD_g = np.vstack( (self.F_CFD_g, forces_CFD[:,1:3+1]) ) # hstack for scalars, vstack for vectors (annoying)
-        self.M_CFD_g = np.vstack( (self.M_CFD_g, moments_CFD[:,1:3+1]) )
+                # append this cycle
+                self.__append_parse_kinematics( alpha=alpha[j1:j3], phi=phi[j1:j3], theta=theta[j1:j3], alpha_dt=alpha_dt[j1:j3], phi_dt=phi_dt[j1:j3], 
+                                               theta_dt=theta_dt[j1:j3], psi=psi[j1:j3], beta=beta[j1:j3], gamma=gamma[j1:j3], eta=eta[j1:j3], 
+                                               u_infty_g=u_infty_g[j1:j3,:], side=wing.replace('2',''), dt=dt, timeline=t[j1:j3], ipeaks=[0, j2-j1])
+
+            
+                # append CFD forces and moments
+                self.F_CFD_g = np.vstack( (self.F_CFD_g, forces_CFD[j1:j3,1:3+1]) ) # hstack for scalars, vstack for vectors (annoying)
+                self.M_CFD_g = np.vstack( (self.M_CFD_g, moments_CFD[j1:j3,1:3+1]) )
                 
-        # obtain CFD data in wing reference frame (only last nt time steps, those are the ones we read right now)
-        self.M_CFD_w = np.vstack( (self.M_CFD_w, apply_rotations_to_vectors(self.M_g2w[-nt:,:,:], self.M_CFD_g[-nt:,:]) ) )
-        self.F_CFD_w = np.vstack( (self.F_CFD_w, apply_rotations_to_vectors(self.M_g2w[-nt:,:,:], self.F_CFD_g[-nt:,:]) ) )
+                #---------------------------------------------------------------------
+                # wing shape
+                #---------------------------------------------------------------------        
+                self.__append_wing_shape(j3-j1, wingShapeFile, verbose=False)
+                        
+        # obtain CFD data in wing reference frame
+        self.M_CFD_w = apply_rotations_to_vectors(self.M_g2w[:,:,:], self.M_CFD_g[:,:])
+        self.F_CFD_w = apply_rotations_to_vectors(self.M_g2w[:,:,:], self.F_CFD_g[:,:])            
         
         #---------------------------------------------------------------------
         # compute aerodynamic power
@@ -334,16 +382,14 @@ class QSM:
         # aerodynamic power. Can be read from t-file or computed from the dot-product of moment and angular
         # velocity. This latter is done here: we do not store the power for each wing separately in the CFD run, and hence
         # computing it here is the better choice if possibly more than one wing has been simulated.·
-        self.P_CFD = np.hstack( (self.P_CFD, -(  np.sum( self.M_CFD_w[-nt:,:]*self.rot_wing_w[-nt:,:], axis=1 ) ) ) )
+        self.P_CFD = -(  np.sum( self.M_CFD_w[:,:]*self.rot_wing_w[:,:], axis=1 ) )
         
-        #---------------------------------------------------------------------
-        # wing shape
-        #---------------------------------------------------------------------        
-        self.__append_wing_shape(nt, wingShapeFile, verbose=verbose)
+        
 
     def append_KinematicsShape( self, t, wing, u_body, psi, beta, gamma, eta,
                                wingShapeFile, kinematics_file=None, alpha=None, 
-                               phi=None, theta=None, unit_in='deg', verbose=True):
+                               phi=None, theta=None, unit_in='deg', verbose=True,
+                               nonperiodic_kinematics=False):
         """
         Append a set of kinematics and wing shape to the data stored in the QSM object.
         
@@ -354,7 +400,7 @@ class QSM:
         then evaluate the QSM model using the function `evalQSM_all` (or the forces, moments
         power individually).
         
-        If the wingShapeFile is None, we set the geometry factors in the QSM model all to one.
+        If the wingShapeFile is None, we set the geometry factors in the QSM model all to 1.0.
         This is fine if you did the same in obtaining the coefficients for the model. Otherwise,
         this will not be correct. It is strongly recommended to always use the geometry factors.
         
@@ -372,6 +418,15 @@ class QSM:
         kinematics file. The values for the body attitude can be constants: for the angles, you can pass a 
         single value, for the velocity an array of length 3. You can also pass the angles as arrays 
         of the same length as the time vector: in that case, the body attitude may vary over time.
+        
+        *nonperiodic_kinematics*:
+            
+            If set, the code will identify up- and downstrokes over the given period of time. I.e., you can
+            call this routine with data concerning more than one wingbeat cycle (say T=[1.0, 20.0]) and
+            it will identify the different cycles. Attention, the cycle duration will no longer be 1.0, of course.
+            
+            Futhermore, for reversal detection, we use the roots of phi_dt, regardless of what is specified as `reversal_detector`
+        
         
         """
         
@@ -438,16 +493,54 @@ class QSM:
         alpha_dt = D1 @ alpha
         phi_dt   = D1 @ phi
         theta_dt = D1 @ theta
+
+        if nonperiodic_kinematics == False:                
+            # ready to parse (compute angular velocities, unit vectors, etc)
+            self.__append_parse_kinematics( alpha=alpha, phi=phi, theta=theta, alpha_dt=alpha_dt, phi_dt=phi_dt, 
+                                           theta_dt=theta_dt, psi=psi, beta=beta, gamma=gamma, eta=eta, 
+                                           u_infty_g=u_infty_g, side=wing, dt=dt, timeline=t)
+            
+            #---------------------------------------------------------------------
+            # wing shape
+            #---------------------------------------------------------------------        
+            self.__append_wing_shape(nt, wingShapeFile, verbose=verbose)
+            
+        else:
+
+            # Step1: decide on cycles
+            roots = find_roots_discrete(phi_dt)
+            
+            # for non-periodic kinematics, it is well possible that the first cycle is incomplete
+            
+            # plt.figure()
+            # plt.plot(t, phi_dt)
+            # plt.plot(t[roots], phi_dt[roots], 'ro')
+            # raise
+            
+            # a b c a b c a b ...
+            Nroots  = len(roots)
+            Ncycles = np.floor( Nroots / 3.0 )            
+            roots   = roots[0:3*int(Ncycles)+1]
+            
+            self.Tstart = t[roots[0]]
+            
+            # add the cycles we found
+            for a in np.arange(start=0, stop=len(roots)-2, step=2):
+                # j1: start of 1st half cycle
+                # j2: change of half cycles 
+                # j3: end of 2nd half cycle (=beginning of next 1st cycle)
+                j1, j2, j3 = roots[a], roots[a+1], roots[a+2]
                 
-        # ready to parse (compute angular velocities, unit vectors, etc)
-        self.__append_parse_kinematics( alpha=alpha, phi=phi, theta=theta, alpha_dt=alpha_dt, phi_dt=phi_dt, 
-                                       theta_dt=theta_dt, psi=psi, beta=beta, gamma=gamma, eta=eta, 
-                                       u_infty_g=u_infty_g, side=wing, dt=dt, timeline=t)
+                # append this cycle
+                self.__append_parse_kinematics( alpha=alpha[j1:j3], phi=phi[j1:j3], theta=theta[j1:j3], alpha_dt=alpha_dt[j1:j3], phi_dt=phi_dt[j1:j3], 
+                                               theta_dt=theta_dt[j1:j3], psi=psi[j1:j3], beta=beta[j1:j3], gamma=gamma[j1:j3], eta=eta[j1:j3], 
+                                               u_infty_g=u_infty_g[j1:j3,:], side=wing.replace('2',''), dt=dt, timeline=t[j1:j3], ipeaks=[0, j2-j1])
+
+                #---------------------------------------------------------------------
+                # wing shape
+                #---------------------------------------------------------------------        
+                self.__append_wing_shape(j3-j1, wingShapeFile, verbose=False)
         
-        #---------------------------------------------------------------------
-        # wing shape
-        #---------------------------------------------------------------------        
-        self.__append_wing_shape(nt, wingShapeFile, verbose=verbose)
 
         
     def __append_wing_shape(self, nt, wingShapeFile, verbose=True, force_reload=False):
@@ -566,7 +659,8 @@ class QSM:
             raise ValueError("Wing shape setup has failed and computed NANs...")
 
      
-    def __append_parse_kinematics(self, alpha, phi, theta, alpha_dt, phi_dt, theta_dt, psi, beta, gamma, eta, u_infty_g, side, dt, timeline):
+    def __append_parse_kinematics(self, alpha, phi, theta, alpha_dt, phi_dt, theta_dt, psi, beta, gamma, eta, u_infty_g, 
+                                  side, dt, timeline, ipeaks=None):
         """
         Parse kinematics: given the wing angles and their time derivatives, as well as body attitude, 
         compute derived kinematics qyts for modeling: angular velocities, etc. 
@@ -583,6 +677,7 @@ class QSM:
         
         # shift the time, so that it starts at zero
         t = timeline.copy() - timeline[0]
+   
         
         # to identify different data parts (mostly, used for cycles)
         if self.dataID.shape[0] == 0:
@@ -756,59 +851,84 @@ class QSM:
             # flip the sign directly in e_lift_g)
             sign_liftvector *= -1.0
           
- 
-        if self.reversal_detector == 'planar':
-            qty_to_use = planar_rot_wing_mag #self.u_tip_mag
-        elif self.reversal_detector == 'phi_dt':
-            qty_to_use = np.abs(phi_dt)
-        else:
-            raise ValueError("Unknown reversal detector method: "+self.reversal_detector)
-        
-        # find minima in wingtip velocity magnitude. those, hopefully two, will be the reversals,
-        # this is where the sign is flipped. We repeat the (periodic) signal to ensure we capture
-        # peaks at t=0.0 and t=1.0. The distance between peaks is 3/4 * 1/2, so we think that the two half-strokes
-        # occupy at most 3/8 and 5/8 of the complete cycle (maximum imbalance between up- and downstroke). This
-        # filters out smaller peaks (in height) automatically, so we are left with the two most likely candidates.
-        ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[qty_to_use] ), distance=3*nt/4/2)
-        ipeaks -= nt # shift (skip 1st periodic image)
+	# ipeaks can be computed externally, then we do not do that here
+        if ipeaks is None:
+            if self.reversal_detector == 'planar':
+                qty_to_use = planar_rot_wing_mag #self.u_tip_mag
+            elif self.reversal_detector == 'phi_dt':
+                qty_to_use = np.abs(phi_dt)
+            elif self.reversal_detector == 'roots':
+                qty_to_use = phi_dt
+            else:
+                raise ValueError("Unknown reversal detector method: "+self.reversal_detector)
                 
-        # keep only peaks in the original signal domain (remove periodic "ghosts")
-        ipeaks = ipeaks[ipeaks>=0]
-        ipeaks = ipeaks[ipeaks<nt]
+            if self.reversal_detector != 'roots':
+                # find minima in wingtip velocity magnitude. those, hopefully two, will be the reversals,
+                # this is where the sign is flipped. We repeat the (periodic) signal to ensure we capture
+                # peaks at t=0.0 and t=1.0. The distance between peaks is 3/4 * 1/2, so we think that the two half-strokes
+                # occupy at most 3/8 and 5/8 of the complete cycle (maximum imbalance between up- and downstroke). This
+                # filters out smaller peaks (in height) automatically, so we are left with the two most likely candidates.
+                ipeaks, _ = scipy.signal.find_peaks( -1*np.hstack(  3*[qty_to_use] ), distance=3*nt/4/2)
+                ipeaks -= nt # shift (skip 1st periodic image)
+                        
+                # keep only peaks in the original signal domain (remove periodic "ghosts")
+                ipeaks = ipeaks[ipeaks>=0]
+                ipeaks = ipeaks[ipeaks<nt]
+                        
+            else:
+                ipeaks = find_roots_discrete(qty_to_use)
                 
-        # It should be two minima of velocity, if its not, then something weird happens in the kinematics.
-        # We must then look for a different way to determine reversals or set it manually.
-        if len(ipeaks) != 2 :
-            plt.figure()
-            plt.plot( -1.0*np.hstack(3*[qty_to_use]) )
-            plt.xlabel('timeline (repeated identical cycle 3 times)')
-            plt.ylabel('u_tip_mag (wing=%s)' % (self.wing))
-            plt.plot( ipeaks, -1.0*qty_to_use[ipeaks], 'ro')
-            plt.plot( ipeaks+nt, -1.0*qty_to_use[ipeaks], 'ro')
-            plt.plot( ipeaks+2*nt, -1.0*qty_to_use[ipeaks], 'ro')
-            plt.title('Wing velocity minima detection: PROBLEM (more than 2 minima found)')
-            raise ValueError("We found more than two reversals in the kinematics data...")
+            
+            if len(ipeaks) >2:
+                ipeaks = ipeaks[0:1+1]
+                
+            # It should be two minima of velocity, if its not, then something weird happens in the kinematics.
+            # We must then look for a different way to determine reversals or set it manually.
+            if len(ipeaks) == 1 :
+                plt.figure()
+                plt.subplot(2,2,1)
+                plt.plot(timeline, phi*rad2deg, label='phi')
+                plt.grid()
+                plt.legend()
+                
+                plt.subplot(2,2,2)
+                plt.plot(timeline, phi_dt*rad2deg, label='phi_dt')
+                plt.grid()
+                plt.legend()
+                
+                plt.subplot(2,2,4)
+                plt.plot( timeline, -1.0*qty_to_use, 'k', label='reversal_detector' )
+                plt.plot( timeline-1.0, -1.0*qty_to_use, color=insect_tools.change_color_opacity('k', 0.25) )
+                plt.plot( timeline+1.0, -1.0*qty_to_use, color=insect_tools.change_color_opacity('k', 0.25) )
+                plt.grid()
+                plt.legend()
+                plt.xlabel('timeline (repeated identical cycle 3 times)')
+                plt.ylabel('detector=%s (wing=%s)' % (self.reversal_detector, self.wing))
+                plt.plot( timeline[ipeaks], -1.0*qty_to_use[ipeaks], 'ro')
+                # plt.plot( ipeaks+nt, -1.0*qty_to_use[ipeaks], 'ro')
+                # plt.plot( ipeaks+2*nt, -1.0*qty_to_use[ipeaks], 'ro')
+                plt.title('Wing velocity minima detection: PROBLEM (more than 2 minima found)')
+                raise ValueError("We found more than two reversals in the kinematics data...")
 
-        sign_liftvector[ ipeaks[0]:ipeaks[1], : ] *= -1
+
+        # New version, 08/april/2026:
+        # Sign is detected usingt the following convenction:
+        # mean(phi_dt) < 0 : DOWN stroke
+        # mean(phi_dt) > 0 : UP stroke
+        # we always flip the sign of the UPSTROKE. This criterion is deterministic.        
+        if np.mean( phi_dt[ipeaks[0]:ipeaks[1]] ) < 0:
+            # this is the downstroke,
+            # multiply upstroke with negative sign
+            sign_liftvector[ ipeaks[1]:, : ] *= -1
+        else:
+            # this is the upstroke
+            # multily it with the negative sign
+            sign_liftvector[ ipeaks[0]:ipeaks[1], : ] *= -1
+            
+        # apply the sign
         e_lift_g *= sign_liftvector
-        
-        # Convention: the mean lift vector in the body system should point upwards. The problem is that the code
-        # sometimes identifies the first- and sometimes the second part of the stroke as downstroke.
-        # This is no problem when training a model with a run: the sign of the lift coefficients will
-        # simply be inverted. However, when using the trained model for prediction of a different kinematics
-        # set, then it may identify the other half as downstroke - the resulting prediction is completely wrong,
-        # because the sign of e_lift_g needs to be inverted.
-        # Assuming the lift vectors ez_body component is positive is a convention - still, the training can invert
-        # the sign of the coefficients should that be necessary in weird maneuvres when the insect is flying on its
-        # back.
-        e_lift_b = apply_rotations_to_vectors(M_g2b, e_lift_g)
-        if np.mean(e_lift_b[:,2]) < 0.0:
-            e_lift_g *= -1.0
-            sign_liftvector *= -1.0
-            
-            
+                    
         self.sign_liftvector = np.vstack((self.sign_liftvector, sign_liftvector))
-            
         self.e_lift_g = np.vstack((self.e_lift_g, e_lift_g))
         self.e_drag_g = np.vstack((self.e_drag_g, e_drag_g))
         
@@ -2004,3 +2124,20 @@ def copyQSMcoefficients(QSM1, QSM2):
     QSM2.AM_model = QSM1.AM_model
 
 
+def find_roots_discrete(y):
+    """
+    Find approximate roots (zero crossings) of a discrete signal.
+    """
+    roots = []
+    
+    for i in range(y.shape[0]-1):
+        # Check for sign change
+        if y[i] == 0:
+            roots.append(i)
+        elif y[i] * y[i + 1] < 0:
+            # Pick the point closer to zero
+            if abs(y[i]) < abs(y[i + 1]):
+                roots.append(i)
+            else:
+                roots.append(i+1)
+    return roots
