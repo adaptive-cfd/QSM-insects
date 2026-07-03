@@ -809,7 +809,7 @@ class QSM:
         self.u_tip_w = np.vstack( (self.u_tip_w, u_tip_w) )
         self.u_tip_mag = np.hstack( (self.u_tip_mag, u_tip_mag)) # hstack for scalars, vstack for vectors (annoying)
         # wing tip velocity mangitude relative to body
-        self.u_tip_rel_mag = np.hstack( (self.u_tip_rel_mag, np.linalg.norm(np.cross(rot_wing_g, ey_wing_g)) ) )
+        self.u_tip_rel_mag = np.hstack( (self.u_tip_rel_mag, np.linalg.norm(np.cross(rot_wing_g, ey_wing_g),axis=1) ) )
         
         # drag unit vector
         e_drag_g = np.zeros_like( u_infty_g )
