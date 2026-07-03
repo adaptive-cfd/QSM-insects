@@ -58,13 +58,15 @@ class QSM:
         self.reversal_detector = reversal_detector
         self.model_CL_CD       = model_CL_CD
         
-        self.x0_forces = np.zeros((14))
+        # coefficients for the force models:
+        self.x0_forces  = np.zeros((14))
+        # coefficients (=lever coordinates) for moments and power:
         self.x0_moments = np.zeros((2))
-        self.x0_power = np.zeros((2))
+        self.x0_power   = np.zeros((2))
         
-        self.K_forces = np.nan
+        self.K_forces  = np.nan
         self.K_moments = np.nan
-        self.K_power = np.nan
+        self.K_power   = np.nan
         
         # initialize empty data arrays:
         self.deleteData_keepCoefficients()
@@ -97,6 +99,8 @@ class QSM:
         self.u_tip_w = np.zeros(vector)
         self.u_tip_g = np.zeros(vector)
         self.u_tip_mag = np.zeros(scalar)
+        # wing tip velocity mangitude relative to body
+        self.u_tip_rel_mag = np.zeros(scalar)
     
         self.a_tip_w = np.zeros(vector)
         self.a_tip_g = np.zeros(vector)
@@ -200,8 +204,8 @@ class QSM:
         body velocity, etc.
             
         We read the data between T_start and T_end with a temporal resolution of dt. This may be more than one cycle, 
-        which only makes sense with a non-periodic wingbeat in the simulation: `nonperiodic_kinematics=True`.  
-        Otherwise, we expect on cycle or less: it may also be an incomplete cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) ). 
+        which only makes sense with a non-periodic wingbeat in the simulation: set `nonperiodic_kinematics=True`.  
+        Otherwise, we expect one cycle or less: it may also be an incomplete cycle. Note T_end is excluded (PYTHON logic: open interval [T_start, T_end) ). 
         The most often used case is that the data cover one stroke, e.g. [1.0, 2.0).
                                                                           
         If nonperiodic_kinematics=True, you can pass the entire interval of interest covering several cycles.
@@ -224,8 +228,6 @@ class QSM:
             it will identify the different cycles. Attention, the cycle duration will no longer be 1.0, of course.
             
             Futhermore, for reversal detection, we use the roots of phi_dt, regardless of what is specified as `reversal_detector`
-        
-
         """        
 
         # timeline to read
@@ -328,19 +330,24 @@ class QSM:
         
         # ready to parse (compute angular velocities, unit vectors, etc)
         if nonperiodic_kinematics == False:
+            #---------------------------------------------------------------------
+            # periodic kinematics
+            #---------------------------------------------------------------------
             self.__append_parse_kinematics( alpha=alpha, phi=phi, theta=theta, alpha_dt=alpha_dt, phi_dt=phi_dt, 
                                            theta_dt=theta_dt, psi=psi, beta=beta, gamma=gamma, eta=eta, 
                                            u_infty_g=u_infty_g, side=wing.replace('2',''), dt=dt, timeline=t)
+            
             # append CFD forces and moments
             self.F_CFD_g = np.vstack( (self.F_CFD_g, forces_CFD[:,1:3+1]) ) # hstack for scalars, vstack for vectors (annoying)
             self.M_CFD_g = np.vstack( (self.M_CFD_g, moments_CFD[:,1:3+1]) )
             
-            #---------------------------------------------------------------------
-            # wing shape
-            #---------------------------------------------------------------------        
+            # wing shape   
             self.__append_wing_shape(nt, wingShapeFile, verbose=verbose)
                     
         else:
+            #---------------------------------------------------------------------
+            # NON-periodic kinematics
+            #---------------------------------------------------------------------
             # Step1: decide on cycles
             roots = find_roots_discrete(phi_dt)
             
@@ -556,6 +563,10 @@ class QSM:
         This function is not intended for users of the QSM code, indicated by the leading
         two underscores (__) - it is mainly for internal use of the code.
         """
+        
+        if wingShapeFile is None:
+            return
+        
         if verbose:
             print('Parsing wing contour: '+wingShapeFile)
     
@@ -797,6 +808,8 @@ class QSM:
         self.u_tip_g = np.vstack( (self.u_tip_g, u_tip_g) )
         self.u_tip_w = np.vstack( (self.u_tip_w, u_tip_w) )
         self.u_tip_mag = np.hstack( (self.u_tip_mag, u_tip_mag)) # hstack for scalars, vstack for vectors (annoying)
+        # wing tip velocity mangitude relative to body
+        self.u_tip_rel_mag = np.hstack( (self.u_tip_rel_mag, np.linalg.norm(np.cross(rot_wing_g, ey_wing_g)) ) )
         
         # drag unit vector
         e_drag_g = np.zeros_like( u_infty_g )
@@ -851,7 +864,8 @@ class QSM:
             # flip the sign directly in e_lift_g)
             sign_liftvector *= -1.0
           
-	# ipeaks can be computed externally, then we do not do that here
+        # peaks can be computed externally, then we do not do that here
+        # This is the case for non-periodic kinematics
         if ipeaks is None:
             if self.reversal_detector == 'planar':
                 qty_to_use = planar_rot_wing_mag #self.u_tip_mag
@@ -876,9 +890,10 @@ class QSM:
                 ipeaks = ipeaks[ipeaks<nt]
                         
             else:
+                # use roots (zero-crossings) of PHI_DT as indicator
                 ipeaks = find_roots_discrete(qty_to_use)
-                
             
+            # the idea is the following: 
             if len(ipeaks) >2:
                 ipeaks = ipeaks[0:1+1]
                 
