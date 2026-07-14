@@ -59,7 +59,7 @@ class QSM:
         self.model_CL_CD       = model_CL_CD
         
         # coefficients for the force models:
-        self.x0_forces  = np.zeros((14))
+        self.x0_forces  = np.zeros((22))
         # coefficients (=lever coordinates) for moments and power:
         self.x0_moments = np.zeros((2))
         self.x0_power   = np.zeros((2))
@@ -101,6 +101,7 @@ class QSM:
         self.u_tip_mag = np.zeros(scalar)
         # wing tip velocity mangitude relative to body
         self.u_tip_rel_mag = np.zeros(scalar)
+        self.J_advance = np.zeros(scalar)
     
         self.a_tip_w = np.zeros(vector)
         self.a_tip_g = np.zeros(vector)
@@ -777,6 +778,8 @@ class QSM:
         # flight velocity in the wing system 
         u_infty_w = apply_rotations_to_vectors(M_g2w, u_infty_g)
         self.u_infty_w = np.vstack( (self.u_infty_w, u_infty_w) )
+        
+        
        
         # these are all unit vectors of the wing
         # ey_wing_g coincides with the tip only if R is normalized (usually the case)
@@ -810,6 +813,9 @@ class QSM:
         self.u_tip_mag = np.hstack( (self.u_tip_mag, u_tip_mag)) # hstack for scalars, vstack for vectors (annoying)
         # wing tip velocity mangitude relative to body
         self.u_tip_rel_mag = np.hstack( (self.u_tip_rel_mag, np.linalg.norm(np.cross(rot_wing_g, ey_wing_g),axis=1) ) )
+        
+        # advance ratio
+        self.J_advance = np.linalg.norm(self.u_infty_g, axis=1) / self.u_tip_rel_mag
         
         # drag unit vector
         e_drag_g = np.zeros_like( u_infty_g )
@@ -986,10 +992,24 @@ class QSM:
         if plot:
             self.plot_dynamics()
         
-    def evalQSM_forces(self, x0, training=False):
+    def evalQSM_forces(self, x0=None, training=False):
         """
         Evaluate QSM force model with the current set of parameters x0. 
+        As this function is also used during model training, it does not use the self.x0
+        set of parameters (those will be the final, trained parameters), but the ones you pass.
+        
+        By default, x0=None, in which case self.x0_forces is used. This is useful only after
+        the training, of course.
         """
+        
+        if x0 is None:
+            x0 = self.x0_forces
+            
+        if np.all( np.abs(x0) <= 1.0e-10 ):
+            import warnings
+            warnings.warn("""We try to evaluate the QSM model, but it seems the QSM coefficients
+                          x0 are all zeros. Maybe you forgot to train the model before trying to use it?""")
+           
         
         # unpack coefficients from parameter vector
         Cl, Cd, Crot, Crd, Cam1, Cam2, Cam3, Cam4, Cam5, Cam6, Cam7, Cam8 = self.__unpack_parameters(x0)
@@ -1030,30 +1050,137 @@ class QSM:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # lift/drag forces
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Ellingtons lift/drag forces, following Cai et al 2021. Note many other papers dealt with hovering
+        # Ellingtons lift/drag forces
+        # 
+        # We implement different models:
+        #
+        # *utip*: following Cai et al 2021. Note many other papers dealt with hovering
         # flight, which features zero cruising speed. Cai et al is a notable exception. Instead of the more
         # common planar_rot_wing_mag, he used u_tip_mag, which includes the flight velocity
         # and thus delivers nonzero values even for still wings. Cai integrated over the blades, and each blade
         # had the correct velocity. This can be done analytically, as we do here, see my lecture notes.
+        #
+        # *rot*: The conventional model based on the wings angular velocity. Mostly useable for hovering flight.
+        # Also note that in hovering, rot and utip will be identical.
+        #
+        # *ABC*: A model that correctly integrates the velocity vector analytically, which is then different from 
+        # the S2 moment that is conventionally used. A similar approach has been used in Han et al 2017 (An aerodynamic model for insect
+        # flapping wings in forward flight)
+        #
+        # *Kamimizu*: A model based on the preprint Kamimizu et al (Data-Driven Discovery and Formulation Refines the Quasi-Steady Model of
+        # Flapping-Wing Aerodynamics). It is similar to the ABC model, but assigns independent CL, CD to each
+        # contribution to the velocity.
+        # https://arxiv.org/abs/2508.18703v1
+        #
+        # *Kamimizu-extended*: Same as before, but uses more complex CL/CD functions for each term.        
         if self.model_terms[0] is True:
+            
+            # velocity decomposition
+            A = self.planar_rot_wing_mag**2
+            B = 2.0*(self.u_infty_w[:,2]*self.rot_wing_w[:,0]-self.u_infty_w[:,0]*self.rot_wing_w[:,2])
+            C = self.u_infty_w[:,0]**2+self.u_infty_w[:,1]**2+self.u_infty_w[:,2]**2
+            
             if self.ellington_type == 'utip':
+                # Basic Ellington term, using tip velocity
                 self.Ftc_mag = 0.5*rho*Cl*(self.u_tip_mag**2)*self.S2
                 self.Ftd_mag = 0.5*rho*Cd*(self.u_tip_mag**2)*self.S2
                 
+                # compute the force vector (global system)
+                for k in [0, 1, 2]:
+                    self.Ftc[:, k] = self.Ftc_mag * self.e_lift_g[:,k]
+                    self.Ftd[:, k] = self.Ftd_mag * self.e_drag_g[:,k]
+                
             elif self.ellington_type == 'rot':
+                # Basic Ellington term, using "planar" angular velocity, probably the most widespread formulation
+                # and mostly used in hovering flight
                 self.Ftc_mag = 0.5*rho*Cl*(self.planar_rot_wing_mag**2)*self.S2
                 self.Ftd_mag = 0.5*rho*Cd*(self.planar_rot_wing_mag**2)*self.S2
+                
+                # compute the force vector (global system)
+                for k in [0, 1, 2]:
+                    self.Ftc[:, k] = self.Ftc_mag * self.e_lift_g[:,k]
+                    self.Ftd[:, k] = self.Ftd_mag * self.e_drag_g[:,k]
                 
             elif self.ellington_type == 'ABC':
                 # Using the bumblebee simulations at various u_infty values, the best choice for ellington_type is 'utip'.
                 # Despite the fact that a similar result (ABC) is presented in Han et al 2017 (An aerodynamic model for insect
                 # flapping wings in forward flight)
-                A = self.planar_rot_wing_mag**2
-                B = 2.0*(self.u_infty_w[:,2]*self.rot_wing_w[:,0]-self.u_infty_w[:,0]*self.rot_wing_w[:,2])
-                C = self.u_infty_w[:,0]**2+self.u_infty_w[:,1]**2+self.u_infty_w[:,2]**2
-
                 self.Ftc_mag = 0.5*rho*Cl*( self.S2*A + self.S1*B + self.S0*C )
                 self.Ftd_mag = 0.5*rho*Cd*( self.S2*A + self.S1*B + self.S0*C )
+                
+                # compute the force vector (global system)
+                for k in [0, 1, 2]:
+                    self.Ftc[:, k] = self.Ftc_mag * self.e_lift_g[:,k]
+                    self.Ftd[:, k] = self.Ftd_mag * self.e_drag_g[:,k]
+                    
+            elif self.ellington_type == 'Kamimizu':
+                # Lift/Drag model that Kamimizu et al proposed (Data-Driven Discovery and Formulation Refines the Quasi-Steady Model of
+                # Flapping-Wing Aerodynamics). It is a six-coefficient model.
+                # This model only considers the normal force of both lift and drag (no tangential force), much like Cai et al.                
+                self.Ftc_mag  = 0.5*rho*A*self.S2 * x0[ 0] * np.sin( 2.0*self.AoA )*np.cos(self.AoA)
+                self.Ftc_mag += 0.5*rho*B*self.S2 * x0[ 2] * np.sin( 2.0*self.AoA )*np.cos(self.AoA)
+                self.Ftc_mag += 0.5*rho*C*self.S2 * x0[14] * np.sin( 2.0*self.AoA )*np.cos(self.AoA)
+                
+                self.Ftd_mag  = 0.5*rho*A*self.S2 * x0[ 1] * np.sin( self.AoA )**3
+                self.Ftd_mag += 0.5*rho*B*self.S2 * x0[ 3] * np.sin( self.AoA )**3
+                self.Ftd_mag += 0.5*rho*C*self.S2 * x0[15] * np.sin( self.AoA )**3
+                    
+                # compute the force vector (global system)
+                for k in [0, 1, 2]:
+                    # Note contrarily to other models, this uses the wing NORMAL, not the lift/drag unit
+                    # vector based on the wing tip velocity.
+                    self.Ftc[:, k] = self.Ftc_mag * self.ez_wing_g[:,k]
+                    self.Ftd[:, k] = self.Ftd_mag * self.ez_wing_g[:,k]
+                    
+            elif self.ellington_type == 'Kamimizu-extended':
+                # The straightforward generalization of Kamimizus idea of decomposing the velocity using 
+                # different coeffiencts.                
+                if self.model_CL_CD == "Dickinson":
+                    AoA = rad2deg*self.AoA
+                    Cl1   = x0[0] + x0[1]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+                    Cd1   = x0[2] + x0[3]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+                    
+                    Cl2   = x0[14] + x0[15]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+                    Cd2   = x0[16] + x0[17]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+                    
+                    Cl3   = x0[18] + x0[19]*np.sin( deg2rad*(2.13*AoA - 7.20) )
+                    Cd3   = x0[20] + x0[21]*np.cos( deg2rad*(2.04*AoA - 9.82) )
+                    
+                elif self.model_CL_CD == "Nakata":
+                    Cl1   = x0[0]*(self.AoA**3 - self.AoA**2 * np.pi/2) + x0[1]*(self.AoA**2 - self.AoA * np.pi/2)
+                    Cd1   = x0[2]*np.cos( self.AoA )**2  + x0[3]*np.sin( self.AoA )**2
+                    
+                    Cl2   = x0[14]*(self.AoA**3 - self.AoA**2 * np.pi/2) + x0[15]*(self.AoA**2 - self.AoA * np.pi/2)
+                    Cd2   = x0[16]*np.cos( self.AoA )**2  + x0[17]*np.sin( self.AoA )**2
+                    
+                    Cl3   = x0[18]*(self.AoA**3 - self.AoA**2 * np.pi/2) + x0[19]*(self.AoA**2 - self.AoA * np.pi/2)
+                    Cd3   = x0[20]*np.cos( self.AoA )**2  + x0[21]*np.sin( self.AoA )**2
+                    
+                elif self.model_CL_CD == "Liu":
+                    # close to the 'Kamimizu' model, but uses different unit vectors (not the wing normal)
+                    Cl1   = x0[0] * np.sin( 2.0*AoA )
+                    Cd1   = x0[1] * np.sin( AoA )**2
+                    
+                    Cl2   = x0[2] * np.sin( 2.0*AoA )
+                    Cd2   = x0[3] * np.sin( AoA )**2
+                    
+                    Cl3   = x0[14] * np.sin( 2.0*AoA )
+                    Cd3   = x0[15] * np.sin( AoA )**2
+                
+                
+                self.Ftc_mag  = 0.5*rho * A * self.S2 * Cl1
+                self.Ftc_mag += 0.5*rho * B * self.S2 * Cl2
+                self.Ftc_mag += 0.5*rho * C * self.S2 * Cl3
+                
+                self.Ftd_mag  = 0.5*rho * A * self.S2 * Cd1
+                self.Ftd_mag += 0.5*rho * B * self.S2 * Cd2
+                self.Ftd_mag += 0.5*rho * C * self.S2 * Cd3
+                    
+                # compute the force vector (global system)
+                for k in [0, 1, 2]:
+                    self.Ftc[:, k] = self.Ftc_mag * self.e_lift_g[:,k]
+                    self.Ftd[:, k] = self.Ftd_mag * self.e_drag_g[:,k]
+                
             else:
                 raise ValueError("The value ellington_type=%s is unkown" % (self.ellington_type))
 
@@ -1069,6 +1196,12 @@ class QSM:
             # else:
             self.Frc_mag = rho*Crot*self.u_tip_mag*self.rot_wing_w[:,1]*self.S_RC # Nakata et al. 2015, Eqn. 2.6c
 
+            # compute the force vector (global system)
+            for k in [0, 1, 2]:
+                # using e_lift_g instead of ez_wing_g did makes approx. worse.
+                # (this was suggested in Cai et al. 2021, Appendix A, just below Eqn A4)
+                self.Frc[:, k] = self.Frc_mag * self.ez_wing_g[:,k] # Sane2002 also state its e_z, like Cai et al
+
 
         # Rotational drag: \cite{Cai2021}. The fact that the wing rotates around its rotation axis, which is the $y$ component of the angular velocity
         # (Which Cai identifies as $\dot{\alpha}$, even though this is only an approximation) induces a net non-zero velocity component normal
@@ -1080,6 +1213,11 @@ class QSM:
         # rotation axis (the point $(0,r,0)^T$), the rotation around that very axis ($y$) is not included in the traditional term.
         if self.model_terms[2] is True:
             self.Frd_mag = (-1/2)*rho*Crd*self.S_RD*np.abs(self.rot_wing_w[:,1])*self.rot_wing_w[:,1] # Cai et al. 2021, Eqn 2.13
+
+            # compute the force vector (global system)
+            for k in [0, 1, 2]:
+                # rotational drag in the normal direction
+                self.Frd[:, k] = self.Frd_mag * self.ez_wing_g[:,k]
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # added mass forces
@@ -1137,6 +1275,11 @@ class QSM:
             else:
                 raise ValueError("unknown AM model")
 
+            # compute the force vector (global system)
+            for k in [0, 1, 2]:
+                # normal added mass force
+                self.Fam[:, k] = self.Fam_z_mag * self.ez_wing_g[:,k]
+
         # *Tangential* added mass forces, like discussed in VanVeen2022, 2.1.1.
         # We assume however a more general form, which includes the components of the acceleration.
         # We do not include the acceleration in y-direction, even though it significantly reduces the error.
@@ -1145,32 +1288,23 @@ class QSM:
         if self.model_terms[4] is True:
             self.Fam_x_mag = rho*(Cam7*self.a_tip_w[:, 0] + Cam8*self.a_tip_w[:, 2])
 
+            # compute the force vector (global system)
+            for k in [0, 1, 2]:
+                # tangential added mass force
+                self.Fam2[:, k] = self.Fam_x_mag * self.ex_wing_g[:,k]
+
         # this even more complete model that included all wing acceleration components proved not a big improvement
         # and seems to have some overlap with the lift/drag definition, thus rendering interpretation more difficult.
         # We therefore drop it.
         ## self.Fam_x_mag = Cam7*self.a_tip_w[:, 0] + Cam8*self.a_tip_w[:, 1] + Cam9*self.a_tip_w[:, 2]
 
-        # vector calculation of Ftc, Ftd, Frc, Fam, Frd arrays of the form (nt, 3).these vectors are in the global reference frame
-        for k in [0, 1, 2]:
-            self.Ftc[:, k] = self.Ftc_mag * self.e_lift_g[:,k]
-            self.Ftd[:, k] = self.Ftd_mag * self.e_drag_g[:,k]
-
-            # using e_lift_g instead of ez_wing_g did makes approx. worse.
-            # (this was suggested in Cai et al. 2021, Appendix A, just below Eqn A4)
-            self.Frc[:, k] = self.Frc_mag * self.ez_wing_g[:,k] # Sane2002 also state its e_z, like Cai et al
-            self.Frd[:, k] = self.Frd_mag * self.ez_wing_g[:,k]
-
-            # normal added mass force
-            self.Fam[:, k] = self.Fam_z_mag * self.ez_wing_g[:,k]
-            # tangential added mass force
-            self.Fam2[:, k] = self.Fam_x_mag * self.ex_wing_g[:,k]
-
-            # total force generated by QSM            
-            self.F_QSM_g[:, k] = self.Ftc[:, k] + self.Ftd[:, k] + self.Frc[:, k] + self.Fam[:, k] + self.Fam2[:, k] + self.Frd[:, k]
+        # total force generated by QSM            
+        self.F_QSM_g = self.Ftc + self.Ftd + self.Frc + self.Fam + self.Fam2 + self.Frd
 
         # QSM forces in wing system:
         if not training:
             self.F_QSM_w = apply_rotations_to_vectors(self.M_g2w, self.F_QSM_g)
+
         
     def evalQSM_moments(self, x0, training=False):
         """
@@ -1247,9 +1381,13 @@ class QSM:
             Cl   = x0[0]*np.sin( AoA )*(np.cos( AoA )**2) + x0[1]*(np.sin( AoA )**2)*np.cos( AoA )
             Cd   = x0[2]*(np.sin( AoA )**2)*(np.cos( AoA )) + x0[3]*(np.sin( AoA )**3)
         elif self.model_CL_CD == 'Whitney':
-            # whitney $ wood eqn 2.20
+            # whitney & wood eqn 2.20
             Cl   = x0[0]*np.sin( 2.0*AoA )
             Cd   = (x0[1]+x0[2])/2 - ((x0[1]-x0[2])/2) * np.cos( 2.0*AoA )
+        elif self.model_CL_CD == 'Liu':
+            # used, e.g., in Kamimizu et al. 2025
+            Cl   = x0[0] * np.sin( 2.0*AoA )
+            Cd   = x0[1] * np.sin( AoA )**2
         
         else:
             raise ValueError("The CL/CD model must be either Dickinson/Nakata/Polhamus, not: "+self.model_CL_CD)
@@ -1333,20 +1471,24 @@ class QSM:
             raise ValueError("You need to read CFD before you can fit the model to it. call QSM.read_CFD_data")
 
         start = time.time()
-        bounds = 14*[(-1000, 1000)]
+        bounds = self.x0_forces.shape[0] * [(-1000, 1000)]
         K_forces = 9e9
 
         # optimize N_trials times from a different initial guess, use best solution found
         # NOTE: tests indicate the system always finds the same solution, so this could
         # be omitted. Kept for safety - we do less likely get stuck in local minima this way
         for i_trial in range(N_trials):
-            x0_forces    = np.random.rand(14)
+            x0_forces    = np.random.rand( self.x0_forces.shape[0] )
             optimization = opt.minimize(cost_forces, args=(self), bounds=bounds, x0=x0_forces)
             x0_forces    = optimization.x
-            
-            # for readability, remove unused coefficients
+      
+            # for readability, set unused coefficients to nan
             if not self.model_terms[0]:
                 x0_forces[0:3+1] = np.nan
+            if not self.model_terms[0] or (self.ellington_type != "Kamimizu" and self.ellington_type != "Kamimizu-extended"):
+                x0_forces[[14,15]] = np.nan
+            if not self.model_terms[0] or self.ellington_type != "Kamimizu-extended":
+                x0_forces[[16,17,18,19]] = np.nan
             if not self.model_terms[1]:
                 x0_forces[4] = np.nan
             if not self.model_terms[2]:
@@ -1355,6 +1497,7 @@ class QSM:
                 x0_forces[ [6,7,8,9,10,11] ] = np.nan
             if not self.model_terms[4]:
                 x0_forces[ [12,13] ] = np.nan   
+            
 
             if optimization.fun < K_forces:
                 K_forces = optimization.fun
